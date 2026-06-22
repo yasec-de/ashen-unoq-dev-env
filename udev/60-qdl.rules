@@ -1,0 +1,8 @@
+# Grant the active graphical/login session user access to Qualcomm EDL/Sahara
+# devices, so `qdl` (qdl/) can talk to the board over USB without sudo.
+#
+# Product IDs per qdl/README.md: 9008 (EDL), 900e (crash-dump/Sahara
+# re-enumeration), 901d.
+SUBSYSTEM=="usb", ATTR{idVendor}=="05c6", ATTR{idProduct}=="9008", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTR{idVendor}=="05c6", ATTR{idProduct}=="900e", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTR{idVendor}=="05c6", ATTR{idProduct}=="901d", TAG+="uaccess"

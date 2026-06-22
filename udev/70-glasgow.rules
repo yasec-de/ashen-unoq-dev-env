@@ -1,0 +1,8 @@
+# Glasgow Interface Explorer - grant local user access (uaccess).
+# Copied verbatim from the glasgow package (nixpkgs glasgow, etc/udev/rules.d).
+# Install to /etc/udev/rules.d/ then: udevadm control --reload-rules && udevadm trigger
+#
+# Caveats (from upstream):
+#  * Filename must lexicographically precede 71-seat.rules.
+#  * uaccess = accessible to whoever is physically at the terminal, not over SSH.
+SUBSYSTEM=="usb", ATTRS{idVendor}=="20b7", ATTRS{idProduct}=="9db1", TAG+="uaccess"
