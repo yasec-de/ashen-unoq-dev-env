@@ -1,0 +1,17 @@
+# Vendored external git repos / extracted bundles (cloned/unpacked separately,
+# each has its own history; commit changes to them in their own repo).
+/arduino-app-lab/
+/arduino-flasher-cli/
+/buildroot/
+/linux/
+/qcom-deb-images/
+/qdl/
+/u-boot/
+/unoq-bootloader-emmc-linux-251020/
+
+# Kernel build artifacts dropped in the repo root by build-image.sh
+/linux-image-*.deb
+/linux-headers-*.deb
+/linux-libc-dev*.deb
+/linux-upstream_*.buildinfo
+/linux-upstream_*.changes
