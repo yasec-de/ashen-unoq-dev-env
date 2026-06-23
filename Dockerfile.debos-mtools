@@ -1,7 +1,0 @@
-# debos image plus mtools (mformat/mcopy) and dtc, which the qcom-deb-images
-# flash recipe needs but the upstream go-debos image lacks.
-#   podman build -t debos-mtools -f Dockerfile.debos-mtools .
-FROM ghcr.io/go-debos/debos:latest
-RUN apt-get update \
- && apt-get install -y --no-install-recommends mtools device-tree-compiler \
- && rm -rf /var/lib/apt/lists/*

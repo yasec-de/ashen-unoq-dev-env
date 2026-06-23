@@ -1,0 +1,11 @@
+# debos image plus the arm64 kernel cross-build toolchain and mtools/dtc,
+# so the same image serves both the kernel-deb build and the flash stage.
+#   podman build -t debos-unoq -f Dockerfile.debos .
+FROM ghcr.io/go-debos/debos:latest
+RUN dpkg --add-architecture arm64 \
+ && apt-get update -qq \
+ && apt-get install -y --no-install-recommends \
+      debhelper dpkg-dev build-essential crossbuild-essential-arm64 \
+      bc bison flex libdw-dev libelf-dev libssl-dev libssl-dev:arm64 \
+      kmod python3 rsync mtools device-tree-compiler \
+ && rm -rf /var/lib/apt/lists/*

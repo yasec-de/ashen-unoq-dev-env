@@ -33,8 +33,9 @@ board over `adb`.
 - `test-on-board.sh` — kexec the freshly built kernel on the running board via
   adb (no flash). Fast kernel iteration.
 - `glasgow-console.sh` — 1.8V serial console to the board's UART via a Glasgow.
-- `Dockerfile.debos-mtools` — go-debos image + mtools/dtc, needed by the flash
-  recipe (build-image.sh builds it on demand).
+- `Dockerfile.debos` — go-debos image + kernel cross-build toolchain +
+  mtools/dtc, used for both the kernel-deb and flash stages of build-image.sh
+  (built on demand).
 - `udev/` — `60-qdl.rules` (EDL `uaccess`) and `70-glasgow.rules`.
 
 ## Board identity: UNO Q = `qrb2210-arduino-imola`
