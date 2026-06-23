@@ -13,10 +13,10 @@ adb get-state >/dev/null
 adb push "$MOD.ko" "/tmp/$MOD.ko"
 
 # rmmod first so re-loading an edited module works; ignore "not loaded".
-adb shell "echo arduino | sudo -S rmmod $MOD 2>/dev/null || true"
-adb shell "echo arduino | sudo -S insmod /tmp/$MOD.ko"
+adb shell "rmmod $MOD 2>/dev/null || true"
+adb shell "insmod /tmp/$MOD.ko"
 
 echo "--- lsmod ---"
 adb shell "lsmod | grep -E '^$MOD ' || echo '($MOD not in lsmod)'"
 echo "--- dmesg tail ---"
-adb shell "echo arduino | sudo -S dmesg | grep '$MOD:' | tail -5"
+adb shell "dmesg | grep '$MOD:' | tail -5"

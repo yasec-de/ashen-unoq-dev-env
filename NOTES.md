@@ -20,6 +20,9 @@ board over `adb`.
   disk image, flash assets. Needed to build a custom image/kernel.
 - `unoq-bootloader-emmc-linux-251020/` — extracted Arduino bootloader zip (see below).
 - `u-boot/` — not investigated; see "U-Boot source" for where the real running U-Boot comes from.
+- `zeroize/` — our fast tamper-response RAM zeroization (kernel patches in
+  `linux/` + a freestanding kdump capture/wipe payload). See "Fast tamper-response
+  zeroization" below and `zeroize/README.md`.
 
 ## Scripts (repo root)
 
@@ -344,3 +347,66 @@ Fix: unbind before running qdl:
 
 (find `<bus>-<port>` via `lsusb -t` or grep `idVendor` for `05c6`). Kill and
 restart `qdl` after — it doesn't recover from launching while unavailable.
+
+## Fast tamper-response zeroization (`zeroize/`)
+
+Two-tier secret erase. Tier 1 runs in the dying kernel's crash path (highest
+value, fastest); tier 2 is a freestanding capture kernel that erases all of RAM.
+Build/deploy/test details in `zeroize/README.md`; this is the design + the
+bring-up findings.
+
+**Trigger / transport.** Tamper → `echo c > /proc/sysrq-trigger` (or in-kernel
+`panic()`). No trigger module: the wipe runs on the normal crash-kexec path, and
+the wipe payload is just the kdump capture image (`kexec -p`). So we *use* the
+kdump machinery, not patch it.
+
+**Tier 1 — crash-path zeroize (patches in `linux/`, branch `ashen`).** Hooked at
+the end of `machine_crash_shutdown()` (after `crash_smp_send_stop()`), so it runs
+single-CPU with the old kernel's mappings still live. Order = crown jewels first:
+keyring (`user`/`logon` payloads) → `memfd_secret` pages → QCE key registers.
+Gated by `crash_zeroize.armed` (off by default; HSM arms at runtime). New file
+`kernel/crash_zeroize.c` + `CONFIG_CRASH_ZEROIZE` (`zeroize.config`).
+
+**Tier 2 — capture/wipe payload (`zeroize/`).** Freestanding aarch64 Image; reads
+`/memory`, `/reserved-memory` (no-map), `/chosen` `linux,usable-memory-range`,
+`/cpus` from the crash DTB; identity-maps RAM, brings up all 4 cores via PSCI,
+wipes in 4 slices, `PSCI SYSTEM_OFF`.
+
+**Non-obvious findings (the parts that bite):**
+
+- **Crash-path code must be lock-free.** Other CPUs are halted; taking
+  `key_serial_lock`/page-cache locks could deadlock against a CPU that holds one.
+  We walk `key_serial_tree` and the secretmem superblock's `s_inodes` without
+  locks. This is also why there are *no timeouts* — single CPU, pure memory
+  writes, nothing to stall.
+- **No secretmem registry needed.** `secretmem_mnt->mnt_sb->s_inodes` already
+  enumerates every live secret folio; the free-path primitive
+  (`set_direct_map_default_noflush()` + zero) is reused as-is. Zero fast-path
+  changes.
+- **QCE key wipe reuses the driver's own `qce_clear_array()`** on
+  `REG_ENCR_KEY0`/`REG_ENCR_XTS_KEY0`/`REG_AUTH_KEY0`/`REG_AUTH_IV0`. The driver
+  has no reset line; clocks are held on for the device lifetime
+  (`devm_clk_get_optional_enabled`) so the registers are reachable from the crash
+  path. QCE is `=m`, so it registers a callback into built-in `crash_zeroize`.
+- **`/proc/sysrq-trigger` bypasses the `kernel.sysrq` mask** and is root-only
+  (`__handle_sysrq(c, false)`), so only `CONFIG_MAGIC_SYSRQ=y` is needed —
+  `kernel.sysrq` can stay 0 (keyboard/serial sysrq disabled).
+- **Wipe-set is mapped Normal Non-Cacheable**, not cacheable + DC ZVA: zeros land
+  in DRAM immediately (no writeback worry for a secure erase) and there's no
+  read-for-ownership. Secure (`no-map`) carveouts are left **unmapped** —
+  writing them from EL1 faults an xPU. Rounding no-map out to 2 MB leaves ≤2 MB
+  slack per carveout edge (firmware regions, no HSM secrets).
+- **crashkernel base is pinned** (`crashkernel=64M@0x80000000` in the image
+  cmdline) so the payload can be linked to its load address (`PAYLOAD_BASE`); no
+  PIC. `usable-memory-range` is always inserted into the crash DTB by the kernel,
+  so the payload trusts it for the "don't wipe our own code" region (and powers
+  off if it's somehow absent rather than self-wiping).
+- **EL handling.** `start.S` drops EL2→EL1 if needed (PSCI may bring secondaries
+  up at EL2). 4× Cortex-A53; core count comes from `/cpus`, not assumed.
+
+**Status:** kernel + payload build clean (`Image`, `qcrypto.ko`, symbols verified;
+payload is a valid arm64 Image, magic at 0x38). Not yet validated on hardware —
+that's destructive (wipes RAM, powers off). Open items: crashkernel base actually
+free (`/proc/iomem`), `kexec -p -s` accepting the raw Image, entry EL. debos
+install wiring (copy to `/usr/lib/zeroize/`, enable service, add `kexec-tools`)
+still to do.

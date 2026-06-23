@@ -1,0 +1,14 @@
+[Unit]
+Description=Stage tamper-response wipe payload as the kdump capture image
+DefaultDependencies=no
+After=local-fs.target
+Before=sysinit.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# Installed alongside the payload Image; see zeroize/README and the debos recipe.
+ExecStart=/usr/lib/zeroize/zeroize-stage.sh
+
+[Install]
+WantedBy=sysinit.target
