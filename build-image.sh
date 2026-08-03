@@ -17,7 +17,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 KERNEL_BRANCH=qcom-v7.0.0-unoq
-LINUX_DIR=linux
+LINUX_DIR=linux-imgbuild
 REPO=qcom-deb-images
 DEBOS_IMAGE=ghcr.io/go-debos/debos:latest
 BUILD_IMAGE=localhost/debos-unoq:latest

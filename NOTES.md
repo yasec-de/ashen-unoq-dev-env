@@ -102,6 +102,41 @@ ABL → `boot.img` (U-Boot, Android boot-image format) → U-Boot UEFI →
 - Practical implication: custom kernel/initrd can be dropped on the ESP +
   new BLS entry, no signing required.
 
+## External JTAG debug: blocked by TrustZone debug policy
+
+Goal was halt-mode JTAG debug of the QRB2210 application cores (kernel hang
+debugging) via Glasgow (`jtag-openocd` applet) + OpenOCD. Full account in
+`TASK.md`; the findings:
+
+- Both TAPs enumerate: `auto0.tap` 0x5ba00477 (ARM DAP), `auto1.tap`
+  0x001c80e1 (Qualcomm).
+- `dap init` originally hung polling DP CTRL/STAT — `CDBGPWRUPACK` asserts,
+  `CSYSPWRUPACK` never does (timeout, error -5). This is a **non-conformant
+  power handshake, not the real blocker**: OpenOCD's `dap create ...
+  -ignore-syspwrupack` skips that wait and `dap init` completes.
+  (`openocd.cfg` carries the flag.)
+- With it, the MEM-AP enumerates: AP IDR `0x14770004` (Qualcomm AXI3/4
+  MEM-AP), CSW `0x30800042` (writable). DP `ABORT`
+  (`auto0.dap dpreg 0x0 0x1F`) clears the JTAG-DP sticky errors that
+  otherwise block every probe — needed between transactions.
+- **But every AXI read through the AP returns `0x00000000`, no fault, clean
+  CTRL/STAT** — DDR `0x80000000`, boot ROM `0x0`, GCC `0x01400000`, TCSR,
+  IMEM all zero. GCC is never all-zero on a running SoC. The AP completes
+  transactions; the secure access controller silently zero-fills all
+  debug-AP reads.
+- That is the definitive signature of **TrustZone debug policy gating the
+  APSS debug AP** (DBGEN/NIDEN/SPIDEN deasserted by the secure boot chain).
+  `BASE`=`0x2` / "No ROM table" / failed CoreSight autodiscovery are all
+  downstream of the same gate. Enforced in secure firmware, invisible to
+  Linux — not a DT or OpenOCD issue.
+
+Reproduce: `openocd -f openocd.cfg` (Glasgow on `/tmp/jtag.sock`, TCK B0/TMS
+B3/TDI B1/TDO B2/TRST B4, `-f 100`), then on tcl port 6666:
+`auto0.dap dpreg 0x0 0x1F; auto0.dap apreg 0 0x4 0x01400000; auto0.dap apreg 0 0xC`
+→ `0x00000000`.
+
+Only JTAG-unlock route left touches secure firmware — see `TASK.md`.
+
 ## U-Boot source
 
 - Running version: `2026.01-rc3-g572d34ccadb9` (from
@@ -125,6 +160,44 @@ live config (`/boot/config-6.16.7-g0dd6551ae96b`): `monza.config`'s
 
 Ground truth for exact running config: always `/boot/config-<uname -r>` on
 the device, not any file in these repos.
+
+## DTB: which copy is live, and how to override per-kernel (TODO)
+
+The kernel-loaded DTB is the **ESP file** `/boot/efi/dtb/qcom/qrb2210-arduino-imola.dtb`
+(U-Boot→systemd-boot path), NOT the `dtb_a`/`dtb_b` FAT partitions (p17/p18,
+`combined-dtb.dtb`). Verified 2026-06-23: editing p17 had no effect on the live
+DT; editing the ESP file did (and a bad DTB there = kernel hang → watchdog
+reset, systemd-boot still runs fine).
+
+BLS entries currently have **no `devicetree` line**, so every entry shares the
+one ESP DTB. **TODO: give the modified (coresight) kernel its own DTB** by
+adding a per-entry `devicetree /path.dtb` line (systemd-boot honors it here),
+e.g. ship `qrb2210-arduino-imola-coresight.dtb` alongside the stock one and
+point only the `-dirty`/experimental entry at it. Then a bad experimental DTB
+can't brick boot — just select the stock entry. The coresight overlay source is
+`coresight-imola.dtso`; merge with `fdtoverlay` onto the stock ESP DTB.
+
+### Recovery from a bad ESP DTB (used 2026-06-23)
+EDL (shunt the two JCTL pins furthest from USB, power on → `05c6:9008`), then:
+```sh
+cd qcom-deb-images/flash_qrb2210-arduino-imola_emmc
+echo '5-2:1.0' | sudo tee /sys/bus/usb/drivers/qcserial/unbind   # NOTES gotcha
+sudo ../../qdl/build/qdl -s emmc prog_firehose_ddr.elf rawprogram-restore.xml
+```
+`rawprogram-restore.xml` flashes only stock `dtb_a`,`dtb_b`,`efi` (efi from
+`../disk-sdcard.img1`, the from-scratch flash image — its ESP DTB is stock/good).
+Key flags that made it work: **`-s emmc`** (without it: "failed to setup
+programming"), and unbinding `qcserial` first. No `patch0.xml` needed — that's
+GPT-repartition only, irrelevant when writing into existing partitions.
+This reverts BLS entries to the image's state; just re-run install-kernel.sh
+after.
+
+### Full flash (with GPT patches)
+For a complete flash that repartitions, include `patch0.xml`:
+```sh
+cd qcom-deb-images/flash_qrb2210-arduino-imola_emmc
+../../qdl/build/qdl -s emmc -l prog_firehose_ddr.elf rawprogram0.xml patch0.xml
+```
 
 ## DTB provenance
 
@@ -257,6 +330,32 @@ stack + GCC + pinctrl + RPM regulator/interconnect + EXT4 + SDHCI to `=y`.
 Built-in → probe during kernel init, tree resolves. With storage also `=y`,
 kernel mounts root with no initramfs at all. Validated: full systemd boot
 to `debian login:` on ttyMSM0, NetworkManager/ModemManager/adbd up.
+
+### Wi-Fi (ath10k_snoc / WCN3990): QRTR deadlock + warm-reboot flakiness
+
+Chip is WCN3990 at `c800000.wifi` (`qcom,wcn3990-wifi`), driven by
+`ath10k_snoc`. It talks to firmware over QMI on QRTR (`AF_QIPCRTR`, PF=42).
+
+**Deadlock when QRTR stack is `=m`:** at boot nothing opens a PF_QIPCRTR
+socket and no `IPCRTR` rpmsg channel exists yet, so neither `qrtr` (alias
+`net-pf-42`) nor `qrtr-smd` (alias `rpmsg:IPCRTR`) autoloads. But the
+remoteprocs' `qmi_handle_init()` fails immediately without qrtr loaded →
+modem/ADSP never boot → no IPCRTR channel → qrtr-smd never loads.
+Chicken-and-egg. Symptoms: `failed to initialize qmi handle` (q6v5_pas),
+`failed to register wlfw qmi client: -517` (ath10k), `deferred probe
+pending`, no `wlan0`. Fix: force `CONFIG_QRTR=y` + `QRTR_SMD=y` (and the
+remoteproc/glink stack) built-in so they probe during kernel init. Userspace
+half (`rmtfs`, `tqftpserv`, `wireless-regdb`) was already present and fine.
+
+**Warm-reboot flakiness:** after a plain `# reboot`, Wi-Fi sometimes does NOT
+come back (ath10k stuck, WCN remoteproc recovery wedged — `kworker
+rproc_recovery_wq` in D-state). A cold power-cycle via `./reset-target.sh`
+(re-powers the board) always brings it up cleanly. So: to test Wi-Fi, reset
+the board with `reset-target.sh`, don't rely on `reboot`.
+
+**Do NOT debug this stack with `modprobe -r ath10k_snoc` / driver rebind:**
+the WCN remoteproc recovery doesn't survive it and wedges (ath10k_snoc then
+won't unload, "Device or resource busy"). Reboot/power-cycle to retest.
 
 ### Building the kernel `.deb` (must be in Debian container, not nix)
 
@@ -410,3 +509,66 @@ that's destructive (wipes RAM, powers off). Open items: crashkernel base actuall
 free (`/proc/iomem`), `kexec -p -s` accepting the raw Image, entry EL. debos
 install wiring (copy to `/usr/lib/zeroize/`, enable service, add `kexec-tools`)
 still to do.
+
+## JTAG halt-mode debug of the A53 cores: WORKING (2026-06-24)
+
+External JTAG halt/inspect/resume of the QRB2210 A53 application cores works.
+The long-held "JTAG impossible / TZ-fuse-gated" verdict was **wrong twice over**
+(see [JTAG.md](JTAG.md) for the full history). Two real findings:
+
+1. **Not security-gated.** Debug is permitted (Secure Boot off, OEM debug fuses
+   unblown). Proven decisively: the RPM Cortex-M3 debug (AHB-AP, AP3) is wide
+   open. A global TZ DBGEN gate could not leave that open.
+2. **The blocker was a wrong dbgbase, not a power gate.** The A53s are behind
+   the APB-AP (AP1, BASE 0x80000000). OpenOCD's ROM-table autodiscovery there
+   faults ("core might be turned off") — but the per-core debug block is
+   directly readable at a fixed address. The "CSYSPWRUPACK never asserts" thing
+   was a red herring: it stays low, yet the cores debug fine once you point
+   OpenOCD at the right base.
+
+**The magic numbers** (from the QCS6490 OpenOCD patch, same APSS layout:
+<https://sourceforge.net/p/openocd/mailman/message/59116199/>):
+- core0 debug base **0x87010000**, its CTI **0x87020000**
+- target: `aarch64 -ap-num 1 -coreid 0 -dbgbase 0x87010000 -cti <cti@0x87020000>`
+- aarch64 halt REQUIRES the CTI object (`cti create ... -baseaddr 0x87020000`).
+
+Confirmed live on our device: MIDR=0x410fd034 (Cortex-A53 r0p4),
+EDDEVARCH=0x47706a15 (ARMv8-A debug). Halted core0, debug_reason=debug-request,
+read coherent PC/SP/X0/X30 (caught it in a userspace spinner: pc=0xaaaa...,
+sp=0xffff...), then resumed cleanly back to running. Config in `openocd.cfg`.
+
+### Operational quirks (important)
+- **Cores power-collapse their debug in idle.** A core only reads its debug regs
+  (non-zero MIDR/EDPRSR) while it's *running*; idle cores read 0 at their debug
+  base (cpuidle/PSCI power-collapse). This kernel exposes **no cpuidle sysfs**,
+  so to keep a core debuggable, pin a busy loop on it (`taskset -c N sh -c
+  'while :; do :; done'`). That's how we caught core0.
+- **adb access drops while any core is halted, and recovers after resume.**
+  A halted CPU stalls whatever runs on it (adbd, the shell). Don't panic if adb
+  hangs during a halt — `resume` brings it back. (Bit us: an `adb pkill` issued
+  right after a halt hung for 2 min until resume.)
+- **All 4 cores now mapped + SMP working (2026-06-24).** Per-core stride is
+  **0x100000**; each core's 0x40000 block = debug(+0)/CTI(+0x10000)/PMU(+0x20000)/
+  ETM(+0x30000). Mapped by a DEVTYPE(+0xFCC) scan: debug=0x15, CTI=0x14,
+  PMU=0x16, ETM=0x13. Bases:
+  | core | debug      | CTI        |
+  |------|------------|------------|
+  | 0    | 0x87010000 | 0x87020000 |
+  | 1    | 0x87110000 | 0x87120000 |
+  | 2    | 0x87210000 | 0x87220000 |
+  | 3    | 0x87310000 | 0x87320000 |
+  `target smp` groups them: one `halt`/`resume` acts on the whole cluster and
+  dumps per-core cpsr/pc/EL/MMU state. Confirmed all 4 halt+resume cleanly,
+  MMU/caches enabled, coherent PCs (mix of EL0t userspace and EL1 kernel).
+- **How to map debug/CTI bases (the method that worked):** raw `apreg` reads
+  collide with OpenOCD's target polling and return 0. Fix: `poll off` first,
+  re-arm the AP (`apreg 1 0x0 0x80000042`), then scan DEVTYPE/MIDR; `poll on`
+  after. A half-broken target (examined but bad CTI) spews
+  `{auto0.a53.N get_reg} pc` errors into the tcl stream — remove bad targets
+  from the config and restart before scanning.
+- **tcl-port command syntax:** use `arp_halt` / top-level `resume` / `get_reg` /
+  `read_memory` — NOT `<target> halt` / `<target> reg` (those print subcommand
+  help, look like errors but aren't).
+- The CoreSight DT overlay work (CTI/ETM nodes) turned out **not** to be needed
+  for JTAG — it powers the QDSS trace clock, orthogonal to the dbgbase fix. It's
+  still installed in the `-test` BLS entry and boots fine.
