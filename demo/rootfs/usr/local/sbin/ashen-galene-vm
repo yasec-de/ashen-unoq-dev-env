@@ -1,0 +1,28 @@
+#!/bin/bash
+# Run the Galene microVM: guest root is the rootfs on the TPM-sealed volume, all guest RAM is
+# tagged MADV_CRASH_SECRET (wiped first by the crash payload), and its NIC is a tap on br0, so it
+# gets its own DHCP address on the demo LAN. Guest console lines go to the kernel console.
+set -euo pipefail
+. /usr/local/lib/ashen/common.sh
+
+ROOTFS=${1:-/var/lib/ashen/vol/rootfs}
+TAP=ashen-tap0
+KERNEL=/boot/efi/$(cat /etc/machine-id)/$(uname -r)/linux
+
+# The guest gets its address from the LAN's DHCP server through br0: wait for the bridge to be
+# up and leased itself, or the guest's DHCP races the uplink.
+wait_for 60 "br0 with an IPv4 lease" sh -c "ip -4 -o addr show br0 | grep -q inet"
+
+ip link del "$TAP" 2>/dev/null || true
+ip tuntap add dev "$TAP" mode tap
+ip link set "$TAP" master br0 up
+
+say "[5/7] starting Galene microVM (512 MiB guest RAM, all tagged secret)"
+/usr/local/lib/ashen/krunwipe --kernel "$KERNEL" --mem 512 --cpus 2 \
+	--crash-memaction secret --tap "$TAP" \
+	run "$ROOTFS" /init "$(date +%s)" 2>&1 |
+	while IFS= read -r line; do
+		# Narration goes to the console; Galene's own log lines only to the journal.
+		case "$line" in galene-vm:*|krunwipe:*) echo "<5>$line" > /dev/kmsg ;; esac
+		echo "$line"
+	done

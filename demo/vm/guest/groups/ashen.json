@@ -1,0 +1,5 @@
+{
+    "public": true,
+    "description": "Ashen demo call",
+    "wildcard-user": {"password": {"type": "wildcard"}, "permissions": "present"}
+}

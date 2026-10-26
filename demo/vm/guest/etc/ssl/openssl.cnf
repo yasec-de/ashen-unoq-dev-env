@@ -1,0 +1,11 @@
+# Minimal config for the guest's static openssl, which otherwise looks under a nix store path.
+[req]
+distinguished_name = dn
+x509_extensions = server
+
+[dn]
+
+[server]
+basicConstraints = critical, CA:FALSE
+keyUsage = critical, digitalSignature
+extendedKeyUsage = serverAuth

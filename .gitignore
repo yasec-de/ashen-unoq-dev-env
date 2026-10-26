@@ -21,3 +21,4 @@
 /linux-libc-dev*.deb
 /linux-upstream_*.buildinfo
 /linux-upstream_*.changes
+/cache/

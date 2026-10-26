@@ -1,0 +1,41 @@
+#!/bin/sh
+# Galene guest init (runs as PID 1's child under libkrun's init, root = this tree over virtiofs).
+# /data is the TPM-sealed volume's data dir: TLS key lives there; a fresh volume means new keys.
+export PATH=/bin OPENSSL_CONF=/etc/ssl/openssl.cnf
+say() { echo "galene-vm: $*"; }
+
+mount -t proc proc /proc 2>/dev/null
+# $1 = host time (epoch seconds): the guest clock starts at zero and a new
+# certificate must not be born expired.
+[ -n "$1" ] && date -s "@$1" >/dev/null
+mount -t tmpfs tmpfs /tmp 2>/dev/null
+cd /srv/galene
+
+# libkrun's virtio-net default MTU is 65520; the LAN is plain Ethernet.
+ip link set eth0 mtu 1500 up
+# libkrun's own DHCP client can give up before the LAN answers; retry with udhcpc, visibly.
+tries=0
+while ! ip -4 -o addr show eth0 2>/dev/null | grep -q inet; do
+	[ $tries -eq 0 ] && say "waiting for a DHCP lease on the demo LAN..."
+	udhcpc -i eth0 -q -n -t 3 -T 2 -s /etc/udhcpc.script >/dev/null 2>&1 && break
+	tries=$((tries + 1))
+	[ $tries -ge 10 ] && { say "WARNING: no DHCP lease on eth0, starting Galene anyway"; break; }
+done
+
+if [ ! -s data/key.pem ]; then
+	say "[6/7] no TLS key on this volume: generating a new P-256 key + self-signed certificate"
+	openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -days 30 \
+		-subj "/CN=ashen-demo" -addext "subjectAltName=DNS:ashen-demo.local,DNS:uno-q.local" \
+		-keyout data/key.pem -out data/cert.pem 2>/dev/null || { say "keygen FAILED"; exit 1; }
+	chmod 600 data/key.pem
+else
+	say "[6/7] reusing TLS key from the encrypted volume"
+fi
+fp=$(openssl x509 -in data/cert.pem -noout -fingerprint -sha256 | cut -d= -f2)
+say "TLS certificate SHA-256 fingerprint:"
+say "  $fp"
+ip=$(ip -4 -o addr show eth0 2>/dev/null | awk '{print $4}' | cut -d/ -f1)
+say "[7/7] Galene serving https://${ip:-?}:8443/"
+# All clients are on the same LAN as the VM's bridged NIC: no TURN relay needed.
+ulimit -n 65536 2>/dev/null
+exec galene -http :8443 -turn "" -data data -groups groups -static static

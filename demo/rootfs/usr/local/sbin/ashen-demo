@@ -1,0 +1,85 @@
+#!/bin/bash
+# Unlock the TPM-sealed demo volume, or - when the TPM can't unseal it (first boot, or after a
+# tamper event destroyed the TPM's seeds) - provision a fresh one: new random volume key, sealed to
+# the TPM, VM image unpacked onto it. The key only ever exists in RAM (/run) and is wiped after
+# enrolment, so afterwards nothing but this TPM can open the volume.
+set -euo pipefail
+. /usr/local/lib/ashen/common.sh
+
+VOL=/var/lib/ashen/volume.img
+VOL_SIZE=1G
+MAPPER=ashen-vol
+MNT=/var/lib/ashen/vol
+IMAGE=/usr/local/share/ashen/galene-rootfs.tar.gz
+# Written last by provision(): a volume without it was interrupted mid-provisioning.
+MARKER=.ashen-provisioned
+# The fwTPM cannot back /dev/tpmrm0 (object contexts are handle references), and libcryptsetup's
+# systemd-tpm2 token plugin always picks tpmrm0; use systemd's built-in TPM2 path on /dev/tpm0.
+export SYSTEMD_CRYPTSETUP_USE_TOKEN_MODULE=0
+CRYPTSETUP=/usr/lib/systemd/systemd-cryptsetup
+
+close_volume() {
+	umount "$MNT" 2>/dev/null || true
+	"$CRYPTSETUP" detach "$MAPPER" 2>/dev/null || true
+	losetup -j "$VOL" -O NAME -n | xargs -r -n1 losetup -d
+}
+
+unlock() {
+	local loop
+	[ -s "$VOL" ] || return 1
+	loop=$(losetup --find --show "$VOL")
+	"$CRYPTSETUP" attach "$MAPPER" "$loop" - tpm2-device=/dev/tpm0,headless=1 \
+		>/run/ashen-unlock.log 2>&1 || return 1
+	mkdir -p "$MNT"
+	mount "/dev/mapper/$MAPPER" "$MNT" 2>/dev/null || return 1
+	test -e "$MNT/$MARKER"
+}
+
+provision() {
+	local loop key=/run/ashen-volume.key
+	say "SYSTEM UNINITIALIZED: TPM cannot unseal the volume - provisioning a new one"
+	close_volume
+	rm -f "$VOL"
+	truncate -s "$VOL_SIZE" "$VOL"
+	(umask 077; head -c 64 /dev/urandom > "$key")
+	say "new volume key generated, formatting LUKS2 volume"
+	# The key is random, so a slow KDF adds nothing; keep provisioning fast.
+	cryptsetup luksFormat -q --type luks2 --pbkdf pbkdf2 --pbkdf-force-iterations 1000 \
+		--key-file "$key" "$VOL"
+	say "sealing volume key to the firmware TPM"
+	systemd-cryptenroll --unlock-key-file="$key" --tpm2-device=/dev/tpm0 --tpm2-pcrs= "$VOL" \
+		>/run/ashen-enroll.log 2>&1 || die "TPM enrolment failed (see /run/ashen-enroll.log)"
+	loop=$(losetup --find --show "$VOL")
+	cryptsetup open --key-file "$key" "$loop" "$MAPPER"
+	# Drop the key-file slot: from now on only the TPM token opens the volume. In batch mode
+	# luksKillSlot does not ask for a passphrase of a remaining slot (there is none).
+	cryptsetup luksKillSlot -q "$VOL" 0
+	shred -u "$key"
+	say "volume key wiped from RAM; only the TPM can open the volume now"
+	mkfs.ext4 -q -L ashen-vol "/dev/mapper/$MAPPER"
+	mkdir -p "$MNT"
+	mount "/dev/mapper/$MAPPER" "$MNT"
+	say "unpacking Galene VM image onto the encrypted volume"
+	mkdir -p "$MNT/rootfs"
+	tar -C "$MNT/rootfs" -xzf "$IMAGE"
+	sync
+	touch "$MNT/$MARKER"
+	sync
+}
+
+say "[4/7] unlocking encrypted VM volume with the TPM"
+# Provisioning destroys the volume, so only a TPM that keeps refusing counts as "wiped": a
+# transient transport error must not take that path.
+unlocked=0
+for attempt in 1 2 3; do
+	if unlock; then unlocked=1; break; fi
+	close_volume
+	[ -s "$VOL" ] || break
+	[ $attempt -lt 3 ] && { say "unlock attempt $attempt failed, retrying"; sleep 2; }
+done
+if [ $unlocked = 1 ]; then
+	say "volume unlocked: existing VM image and TLS key reused"
+else
+	provision
+fi
+say "VM volume ready at $MNT"

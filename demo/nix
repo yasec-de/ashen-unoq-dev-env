@@ -1,0 +1,18 @@
+#!/bin/sh
+# Rootless nix for this VM: nix-portable, store in the buildns tmpfs (see demo/buildns for why
+# not virtiofs). Re-execs itself inside the build namespace when called from outside.
+mountpoint -q /dev/shm/ns || exec /workspace/demo/buildns run "$(realpath "$0")" "$@"
+export NP_LOCATION=/dev/shm/ns NP_RUNTIME=bwrap
+export TMPDIR=/dev/shm/ns/tmp XDG_CACHE_HOME=/dev/shm/ns/xdg
+# A real HOME: without one, tools in `nix develop` shells write to /homeless-shelter, which
+# makes every concurrent nix build (sandbox off) refuse to run.
+export HOME=/dev/shm/ns/home
+mkdir -p "$HOME"
+# The VM's hard open-file limit is 4096; nix's default parallel substitution exceeds it.
+export NIX_CONFIG="http-connections = 8
+max-substitution-jobs = 4
+sandbox = false"
+# Without the sandbox, builds that touch $HOME (/homeless-shelter) leave it behind and nix then
+# refuses every later build; it's scratch, so drop it.
+rm -rf /dev/shm/ns/.nix-portable/emptyroot/homeless-shelter
+exec /workspace/cache/bin/nix-portable nix --extra-experimental-features 'nix-command flakes' "$@"

@@ -1,0 +1,13 @@
+[Unit]
+Description=Ashen: Galene in a tagged-memory microVM
+Requires=ashen-demo.service
+After=ashen-demo.service network-online.target
+
+[Service]
+ExecStart=/usr/local/sbin/ashen-galene-vm
+ExecStopPost=-/usr/sbin/ip link del ashen-tap0
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

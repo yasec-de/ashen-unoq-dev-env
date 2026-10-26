@@ -1,0 +1,10 @@
+#!/bin/sh
+# ssh to the demo board; BOARD=192.168.1.209 to use Wi-Fi instead of wired.
+# Without BOARD, use wired if it answers, else Wi-Fi.
+if [ -z "$BOARD" ]; then
+	BOARD=192.168.1.199
+	timeout 2 bash -c "exec 3<>/dev/tcp/$BOARD/22" 2>/dev/null || BOARD=192.168.1.209
+fi
+[ "$1" = --host ] && { echo "$BOARD"; exit 0; }
+exec ssh -i /workspace/id_ed25519_claude_vm -o StrictHostKeyChecking=accept-new -o ConnectTimeout=5 -o ServerAliveInterval=2 -o ServerAliveCountMax=3 \
+	root@"$BOARD" "$@"

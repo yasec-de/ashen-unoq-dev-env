@@ -1,0 +1,3 @@
+# Ashen demo settings, sourced by /usr/local/sbin/ashen-* scripts.
+# Arm the tamper heartbeat once paired (needs the wipe payload staged as crash kernel).
+ASHEN_ARM=0

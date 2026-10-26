@@ -1,0 +1,14 @@
+[Unit]
+Description=Ashen: pair with tamper MCU, bring up its TPM, arm heartbeat
+DefaultDependencies=no
+After=systemd-modules-load.service local-fs.target zeroize-stage.service
+Wants=zeroize-stage.service
+Before=ashen-demo.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/ashen-pair
+
+[Install]
+WantedBy=multi-user.target

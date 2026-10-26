@@ -1,0 +1,5 @@
+Prebuilt blobs copied 2026-10-26 from /workspace/linux/arch/arm64/boot/dts/qcom/ (ashen-drv-tpm build
+artifacts; their .dts sources come from the Arduino tree and are not in linux-next). The demo DTB is
+base + video_sound-usbc + our qrb2210-arduino-imola-ashen-tamper.dtbo, combined with fdtoverlay.
+a72833de0be6166f9ef96485f62c950891269ad7ba844a6d48fda9d42fcccf9b  qrb2210-arduino-imola-base.dtb
+23a54fb55fb7c389f04e908fc4d8e1630f50f5a5c305eacda9e536d058c38105  qrb2210-arduino-imola-video_sound-usbc.dtbo

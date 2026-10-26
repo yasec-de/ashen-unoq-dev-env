@@ -1,0 +1,26 @@
+#!/bin/sh
+# Build sandbox for this VM: /workspace is virtiofs (host fd per inode -> nix stores and kernel
+# build trees exhaust it) and /dev/shm is noexec. So keep a long-lived user+mount namespace with
+# a private exec-able tmpfs at $NS_ROOT, and run nix/builds inside it via nsenter.
+#   buildns start | stop | status | run CMD...      (state lives in RAM; lost on VM restart)
+NS_ROOT=/dev/shm/ns
+PIDFILE=/dev/shm/buildns.pid
+case "$1" in
+start)
+	[ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null && { echo running; exit 0; }
+	mkdir -p "$NS_ROOT"
+	setsid unshare -Urm --propagation private sh -c \
+		"mount -t tmpfs -o size=24g,mode=755 tmpfs $NS_ROOT && exec sleep infinity" \
+		</dev/null >/dev/null 2>&1 &
+	echo $! > "$PIDFILE"; sleep 1
+	"$0" run sh -c "mkdir -p $NS_ROOT/tmp $NS_ROOT/xdg && df -h $NS_ROOT | tail -1" ;;
+stop)	kill "$(cat "$PIDFILE")" && rm -f "$PIDFILE" ;;
+status)	kill -0 "$(cat "$PIDFILE" 2>/dev/null)" 2>/dev/null && echo running || echo stopped ;;
+run)	shift
+	# Run as uid/gid 1000 (nested userns mapped onto the ns-root, i.e. back to us) so tools
+	# like tar don't try to chown to unmapped ids. nsenter -m drops the cwd; restore it.
+	exec nsenter -t "$(cat "$PIDFILE")" -U -m --preserve-credentials -- \
+		unshare -U --map-user=1000 --map-group=1000 \
+		sh -c 'cd "$1" && shift && exec "$@"' sh "$PWD" "$@" ;;
+*)	echo "usage: $0 start|stop|status|run CMD..." >&2; exit 1 ;;
+esac

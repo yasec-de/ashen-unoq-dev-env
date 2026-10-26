@@ -1,0 +1,15 @@
+[Unit]
+Description=Ashen: unlock or provision the TPM-sealed VM volume
+Requires=ashen-pair.service
+After=ashen-pair.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/ashen-demo
+ExecStop=-/usr/bin/umount /var/lib/ashen/vol
+ExecStop=-/usr/lib/systemd/systemd-cryptsetup detach ashen-vol
+ExecStop=-/bin/sh -c 'losetup -j /var/lib/ashen/volume.img -O NAME -n | xargs -r -n1 losetup -d'
+
+[Install]
+WantedBy=multi-user.target

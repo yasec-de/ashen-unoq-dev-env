@@ -1,0 +1,52 @@
+#!/bin/bash
+# Connect to the Ashen MCU with this host's persistent Noise identity, pair on first use (TOFU),
+# wait for the MCU's firmware TPM to show up, then arm the tamper heartbeat.
+set -euo pipefail
+. /usr/local/lib/ashen/common.sh
+
+KEY=/var/lib/ashen/host.key
+
+ASHEN_DEV=$(ashen_dev) || die "ashen-tamper device not found"
+
+if [ ! -s "$KEY" ]; then
+	install -d -m 700 "$(dirname "$KEY")"
+	(umask 077; head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n' > "$KEY")
+	say "generated new host identity"
+fi
+
+say "[1/7] connecting to tamper MCU"
+cat "$KEY" > "$ASHEN_DEV/local_privkey"	# triggers a reconnect with this key
+sleep 0.3
+wait_for 30 "MCU handshake" sh -c "[ \"\$(awk '\$1==\"connected\"{print \$2}' $ASHEN_DEV/status)\" = 1 ]"
+wait_for 5 "MCU status" sh -c "grep -q '^peer_keyed' $ASHEN_DEV/status"
+
+if [ "$(status_field peer_trusts_us)" != 1 ]; then
+	if [ "$(status_field peer_keyed)" = 1 ]; then
+		die "MCU is paired with a different host (erase it via $ASHEN_DEV/action)"
+	fi
+	say "MCU is unpaired: pairing (trust on first use)"
+	echo pair > "$ASHEN_DEV/action"
+	wait_for 10 "pairing" sh -c "[ \"\$(awk '\$1==\"peer_trusts_us\"{print \$2}' $ASHEN_DEV/status)\" = 1 ]"
+fi
+say "MCU link up, host trusted"
+
+# The driver creates the TPM auxiliary device once; if its probe failed earlier (e.g. the MCU
+# went away mid-probe), nothing retries it. Ask the bus to probe it again.
+tpm_aux=/sys/bus/auxiliary/devices/ashen_tamper.tpm.0
+wait_for 10 "TPM auxiliary device" test -e "$tpm_aux"
+[ -e "$tpm_aux/driver" ] || echo ashen_tamper.tpm.0 > /sys/bus/auxiliary/drivers_probe
+wait_for 30 "firmware TPM" test -c /dev/tpm0
+say "[2/7] firmware TPM available at /dev/tpm0"
+
+# Arming without a staged wipe payload turns any link hiccup into a hung panic, so only arm when
+# the crash kernel is loaded (and not disabled in /etc/default/ashen, e.g. while developing).
+ASHEN_ARM=1
+[ -r /etc/default/ashen ] && . /etc/default/ashen
+if [ "$ASHEN_ARM" != 1 ]; then
+	say "tamper heartbeat NOT armed (ASHEN_ARM=$ASHEN_ARM in /etc/default/ashen)"
+elif [ "$(cat /sys/kernel/kexec_crash_loaded)" != 1 ]; then
+	die "wipe payload not staged (kexec_crash_loaded=0), refusing to arm"
+else
+	echo 1 > "$ASHEN_DEV/armed"
+	say "[3/7] tamper heartbeat ARMED (timeout $(cat "$ASHEN_DEV/timeout") us)"
+fi
