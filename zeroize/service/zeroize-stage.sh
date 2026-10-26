@@ -25,5 +25,12 @@ if [ ! -f "$IMG" ]; then
 	echo "zeroize: ERROR capture image $IMG missing" >/dev/kmsg
 	exit 1
 fi
-kexec -p -s "$IMG"
-echo "zeroize: wipe payload staged as capture image ($IMG)" >/dev/kmsg
+# Tell the payload whether a display is lit: it then switches the panel to solid red during the
+# wipe. It must not touch the display controller otherwise (unclocked MDSS stalls the bus), so
+# this is re-run on display hotplug (see 90-zeroize-display.rules).
+display=0
+for c in /sys/class/drm/card*-*/enabled; do
+	[ "$(cat "$c" 2>/dev/null)" = enabled ] && display=1
+done
+kexec -p -s --append="ashen_display=$display" "$IMG"
+echo "zeroize: wipe payload staged as capture image ($IMG, display=$display)" >/dev/kmsg

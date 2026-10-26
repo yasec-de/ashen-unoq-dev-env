@@ -1,0 +1,3 @@
+# Re-stage the wipe payload when a display is connected or disconnected, so it knows whether it may
+# switch the panel to solid red (see zeroize-stage.sh).
+ACTION=="change", SUBSYSTEM=="drm", KERNEL=="card[0-9]*", ENV{HOTPLUG}=="1", RUN+="/usr/bin/systemctl --no-block restart zeroize-stage.service"
