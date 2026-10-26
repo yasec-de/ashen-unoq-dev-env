@@ -11,8 +11,9 @@
  *      go straight to DRAM, no writeback worry, no read-for-ownership); our own
  *      region = Normal-WB (fast code/stack); UART + watchdog = Device; no-map
  *      carveouts left unmapped (writing them from EL1 would fault an xPU).
- *   3. Enable MMU+caches, wipe the RAM (petting the watchdog), then PSCI
- *      SYSTEM_OFF.
+ *   3. Enable MMU+caches. Wipe the pages the crashed kernel tagged in its
+ *      MEMACTION note (crash_memaction=secret: VM RAM, disk/TLS keys) first,
+ *      then all of RAM (petting the watchdog), then PSCI SYSTEM_RESET.
  *
  * DT cell sizes are hardcoded to this board's layout (root/reserved-memory
  * #address-cells=2 #size-cells=2).
@@ -35,12 +36,40 @@ typedef unsigned long u64;
 #define UART_START_TX		1
 
 #define PSCI_CPU_ON		0xC4000003UL
-#define PSCI_SYSTEM_OFF		0x84000008UL
+#define PSCI_SYSTEM_RESET	0x84000009UL
 
 /* apss/kpss watchdog (sm6115/qcm2290 watchdog@f017000). Writing WDT_RST kicks
  * the bark/bite counter; the full-RAM wipe is long enough to trip it unpetted. */
 #define WDT_BASE		0x0f017000UL
 #define WDT_RST			0x4	/* qcom,kpss-wdt layout */
+
+/* Display controller (qcm2290 DPU 6.5, mdp @ 0x5e01000; offsets from the msm dpu catalog).
+ * Staging only the layer mixer's border colour makes the panel show a solid colour without any
+ * memory fetches, so it survives the full-RAM wipe. Only touched when
+ * the staging script saw an enabled display (ashen_display=1): an unclocked MDSS stalls the bus. */
+#define MDP_BASE		0x05e01000UL
+#define CTL0			(MDP_BASE + 0x1000)
+#define CTL_LAYER0		0x000
+#define CTL_LAYER_EXT0		0x040
+#define CTL_LAYER_EXT2_0	0x070
+#define CTL_LAYER_EXT3_0	0x0a0
+#define CTL_LAYER_EXT4_0	0x0b8
+#define CTL_FLUSH		0x018
+#define CTL_MIXER_BORDER_OUT	(1u << 24)
+#define CTL_FLUSH_LM0		(1u << 6)
+#define CTL_FLUSH_CTL		(1u << 17)
+#define LM0			(MDP_BASE + 0x44000)
+#define LM_BORDER_COLOR_0	0x08	/* green | blue << 16, 12 bits each */
+#define LM_BORDER_COLOR_1	0x10	/* red | alpha << 16 */
+/* Display clock controller: readable at any time (its GCC AHB clock is forced on), so it tells us
+ * whether the display controller is powered and clocked before we touch it. ashen_display=1 only
+ * says a display was lit at staging time; by the panic (e.g. mid-shutdown) it may be off. */
+#define DISPCC_BASE		0x05f00000UL
+#define DISPCC_MDSS_GDSCR	0x3000
+#define DISPCC_MDSS_AHB_CBCR	0x2044
+#define DISPCC_MDSS_MDP_CBCR	0x2008
+#define GDSC_PWR_ON		(1u << 31)
+#define CBCR_CLK_OFF		(1u << 31)
 
 #define SZ_2M			0x200000UL
 #define MASK_2M			(SZ_2M - 1)
@@ -59,6 +88,8 @@ volatile u64 exc_skips;			/* bumped by the fault handler */
 static struct range mem[MAX_MEM];	static int n_mem;
 static struct range nomap[MAX_NOMAP];	static int n_nomap;
 static u64 resv_start, resv_end;	/* our own (usable-memory-range) region */
+static u64 elfcorehdr;			/* /chosen linux,elfcorehdr (in our region) */
+static int display_active;		/* /chosen bootargs has ashen_display=1 */
 
 /* Computed wipe-set (RAM - no-map(rounded to 2 MB) - our region). */
 static struct range wipe[MAX_MEM + MAX_NOMAP]; static int n_wipe;
@@ -132,6 +163,8 @@ static u64 be64(const void *p) { return ((u64)be32(p) << 32) | be32((const u8 *)
 static u32 align4(u32 x) { return (x + 3) & ~3u; }
 static int streq(const char *a, const char *b) { while (*a && *a == *b) { a++; b++; } return *a == *b; }
 static int startswith(const char *s, const char *pfx) { while (*pfx) if (*s++ != *pfx++) return 0; return 1; }
+/* startswith() for DTB data read MMU-off: byte loads only. */
+static int startswith_dev(const char *s, const char *pfx) { while (*pfx) if (rb(s++) != (u8)*pfx++) return 0; return 1; }
 
 static void add_mem(u64 a, u64 n) { if (n && n_mem < MAX_MEM) { mem[n_mem].start = a; mem[n_mem].end = a + n; n_mem++; } }
 static void add_nomap(u64 a, u64 n) { if (n && n_nomap < MAX_NOMAP) { nomap[n_nomap].start = a; nomap[n_nomap].end = a + n; n_nomap++; } }
@@ -180,6 +213,13 @@ static void fdt_parse(u64 dtb)
 				   streq(pn, "linux,usable-memory-range") && len >= 16) {
 				resv_start = be64(data);
 				resv_end = resv_start + be64(data + 8);
+			} else if (depth == 2 && streq(name1, "chosen") &&
+				   streq(pn, "linux,elfcorehdr") && len >= 16) {
+				elfcorehdr = be64(data);
+			} else if (depth == 2 && streq(name1, "chosen") && streq(pn, "bootargs")) {
+				for (u32 o = 0; o + 15 <= len; o++)
+					if (rb(data + o) == 'a' && startswith_dev((const char *)data + o, "ashen_display=1"))
+						display_active = 1;
 			} else if (depth == 3 && streq(name1, "reserved-memory")) {
 				if (streq(pn, "no-map")) d2_nomap = 1;
 				else if (streq(pn, "reg") && len >= 16) {
@@ -268,8 +308,10 @@ static void build_tables(void)
 	for (int i = 0; i < 512; i++)
 		l1[i] = 0;
 
-	/* UART + watchdog (Device). */
+	/* UART + watchdog (+ display controller) (Device). */
 	map_2m(UART_BASE & ~MASK_2M, ATTR_DEVICE | PTE_XN);
+	if (display_active)
+		map_2m(MDP_BASE & ~MASK_2M, ATTR_DEVICE | PTE_XN);	/* also covers DISPCC */
 	map_2m(WDT_BASE & ~MASK_2M, ATTR_DEVICE | PTE_XN);
 
 	/* RAM: our region WB+executable, wipe-set NC, no-map left unmapped. */
@@ -331,8 +373,131 @@ static void wipe_all(void)
 		wipe_range(wipe[i].start, wipe[i].end);
 }
 
+/* --- MEMACTION note (include/linux/crash_memaction.h wire format) --- */
+#define PT_NOTE			4
+#define CRASH_MEMACTION_SECRET	0x2000
+
+struct elf64_phdr { u32 p_type, p_flags; u64 p_offset, p_vaddr, p_paddr, p_filesz, p_memsz, p_align; };
+struct memaction_region { u64 start_pfn, nr_pages, bitmap_paddr; };
+struct memaction_note { u32 types, page_shift, nr_regions, _pad; struct memaction_region regions[]; };
+
+static int in_wipe_set(u64 a, u64 b)
+{
+	for (int i = 0; i < n_wipe; i++)
+		if (wipe[i].start <= a && b <= wipe[i].end)
+			return 1;
+	return 0;
+}
+
+/* Find the MEMACTION descriptor among the PT_NOTE segments of the ELF core
+ * header. Both live in the crashkernel region, so they are mapped WB. */
+static const struct memaction_note *find_memaction(void)
+{
+	const u8 *eh = (const u8 *)elfcorehdr;
+	u64 phoff;
+	u32 phnum;
+
+	if (!elfcorehdr || eh[0] != 0x7f || eh[1] != 'E' || eh[2] != 'L' || eh[3] != 'F' || eh[4] != 2)
+		return 0;
+	phoff = *(const u64 *)(eh + 32);
+	phnum = *(const unsigned short *)(eh + 56);
+
+	for (u32 i = 0; i < phnum; i++) {
+		const struct elf64_phdr *ph = (const void *)(eh + phoff + i * sizeof(*ph));
+		u64 p = ph->p_paddr, end = p + ph->p_filesz;
+
+		if (ph->p_type != PT_NOTE || p < resv_start || end > resv_end)
+			continue;
+		while (p + 12 <= end) {
+			u32 namesz = ((const u32 *)p)[0], descsz = ((const u32 *)p)[1];
+			const char *name = (const char *)(p + 12);
+			u64 desc = p + 12 + align4(namesz);
+
+			if (!namesz && !descsz)
+				break;	/* final_note() terminator */
+			if (namesz == sizeof("MEMACTION") && streq(name, "MEMACTION"))
+				return (const void *)desc;
+			p = desc + align4(descsz);
+		}
+	}
+	return 0;
+}
+
+/* Wipe every page whose bit is set. Returns the number of pages wiped; pages
+ * outside the wipe-set (no-map carveouts, our own region) are left alone. */
+static u64 wipe_tagged(const struct memaction_note *n)
+{
+	u64 pages = 0, psz;
+
+	if (!n || !(n->types & CRASH_MEMACTION_SECRET) || n->page_shift < 12 || n->page_shift > 16)
+		return 0;
+	psz = 1UL << n->page_shift;
+
+	for (u32 r = 0; r < n->nr_regions; r++) {
+		const struct memaction_region *reg = &n->regions[r];
+		const u64 *bm = (const u64 *)reg->bitmap_paddr;
+		u64 bm_end = reg->bitmap_paddr + (reg->nr_pages + 63) / 64 * 8;
+
+		/* The bitmap lives in the old kernel's RAM, i.e. in the wipe-set. */
+		if (!in_wipe_set(reg->bitmap_paddr & ~MASK_2M, (bm_end + MASK_2M) & ~MASK_2M))
+			continue;
+		for (u64 w = 0; w < (reg->nr_pages + 63) / 64; w++) {
+			u64 bits = bm[w];
+
+			while (bits) {
+				u64 bit = __builtin_ctzl(bits);
+				u64 pa = (reg->start_pfn + w * 64 + bit) << n->page_shift;
+
+				bits &= bits - 1;
+				if (w * 64 + bit >= reg->nr_pages || !in_wipe_set(pa, pa + psz))
+					continue;
+				wipe_range(pa, pa + psz);
+				pages++;
+			}
+		}
+	}
+	return pages;
+}
+
+static int display_powered(void)
+{
+	return (readl(DISPCC_BASE + DISPCC_MDSS_GDSCR) & GDSC_PWR_ON) &&
+	       !(readl(DISPCC_BASE + DISPCC_MDSS_AHB_CBCR) & CBCR_CLK_OFF) &&
+	       !(readl(DISPCC_BASE + DISPCC_MDSS_MDP_CBCR) & CBCR_CLK_OFF);
+}
+
+/* Solid red on the panel until reset, independent of RAM contents. */
+static void display_solid_red(void)
+{
+	if (!display_powered())
+		return;
+	writel(0, LM0 + LM_BORDER_COLOR_0);
+	writel(0xfff | (0xfff << 16), LM0 + LM_BORDER_COLOR_1);
+	writel(CTL_MIXER_BORDER_OUT, CTL0 + CTL_LAYER0);
+	writel(0, CTL0 + CTL_LAYER_EXT0);
+	writel(0, CTL0 + CTL_LAYER_EXT2_0);
+	writel(0, CTL0 + CTL_LAYER_EXT3_0);
+	writel(0, CTL0 + CTL_LAYER_EXT4_0);
+	dsb_sy();
+	writel(CTL_FLUSH_LM0 | CTL_FLUSH_CTL, CTL0 + CTL_FLUSH);
+	dsb_sy();
+}
+
+static void uart_putms(u64 ticks, u64 freq)
+{
+	u64 us = ticks * 1000000 / (freq ? freq : 1);
+
+	uart_putu(us / 1000);
+	uart_putc('.');
+	uart_putc('0' + us / 100 % 10);
+	uart_puts(" ms");
+}
+
 void payload_main(u64 dtb)
 {
+	const struct memaction_note *note;
+	u64 t_tag, tagged;
+
 	u64 t0, t1, freq;
 
 	/* All of this runs MMU-off: writes hit DRAM directly. */
@@ -349,10 +514,27 @@ void payload_main(u64 dtb)
 	 * complexity for no speedup. One CPU wipes the whole set, petting the
 	 * watchdog every 16 MB (see wipe_range) so the ~0.85 s pass can't trip the
 	 * bite. ponytail: re-add SMP only if a board actually brings the cores up. */
+	/* A few register writes: the panel turns solid red at once and, needing no memory
+	 * fetches, stays red through the whole wipe until the reset. */
+	if (display_active)
+		display_solid_red();
+
+	freq = rd_cntfrq();
+	t0 = rd_cntvct();
+	note = find_memaction();
+	tagged = wipe_tagged(note);
+	t_tag = rd_cntvct();
+
+	/* Secrets are gone; spend ~5 ms of UART on telling the console. */
+	uart_puts("\nzeroize: TAMPER - wiped ");
+	uart_putu(tagged);
+	uart_puts(note ? " tagged pages in " : " tagged pages (no MEMACTION note!) in ");
+	uart_putms(t_tag - t0, freq);
+	uart_puts("\n");
+
 	t0 = rd_cntvct();
 	wipe_all();
 	t1 = rd_cntvct();
-	freq = rd_cntfrq();
 
 	/* UART is only safe to use now: it's slow polled 115.2 kBd and we keep it
 	 * out of the timed wipe. */
@@ -361,12 +543,12 @@ void payload_main(u64 dtb)
 	uart_puts(" wipe=");
 	uart_puthex(wipe_total);
 	uart_puts(" done in ");
-	uart_putu((t1 - t0) * 1000000 / (freq ? freq : 1));
-	uart_puts(" us, skipped=");
+	uart_putms(t1 - t0, freq);
+	uart_puts(", skipped=");
 	uart_putu(exc_skips);
-	uart_puts(" faults. power off.\n");
+	uart_puts(" faults. reset.\n");
 
-	smc(PSCI_SYSTEM_OFF, 0, 0, 0);
+	smc(PSCI_SYSTEM_RESET, 0, 0, 0);
 	for (;;)
 		asm volatile("wfi");
 }
