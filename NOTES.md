@@ -572,3 +572,114 @@ sp=0xffff...), then resumed cleanly back to running. Config in `openocd.cfg`.
 - The CoreSight DT overlay work (CTI/ETM nodes) turned out **not** to be needed
   for JTAG — it powers the QDSS trace clock, orthogonal to the dbgbase fix. It's
   still installed in the `-test` BLS entry and boots fine.
+
+## KVM / EL2: blocked by QHEE, custom-hyp path validated (2026-08-26)
+
+`/dev/kvm` is absent. `dmesg`: `CPU: All CPU(s) started at EL1` +
+`kvm [1]: HYP mode not available`. The kernel side is complete (`CONFIG_KVM=y`,
+GICv3 maintenance PPI, arch-timer PPIs all present) — the only blocker is that
+**EL2 is owned by QHEE**, Qualcomm's proprietary hypervisor, loaded by XBL from
+the `hyp_a`/`hyp_b` partitions into the `hyp@45700000` carveout. QHEE boots the
+HLOS at EL1 and exposes no VM API (ABL logs `VM Hyp calls not present` — it is
+not Gunyah). The only route to KVM is to stop QHEE occupying EL2.
+
+**Partition geometry (LIVE GPT — use this, not the flash dir):** hyp_a =
+`/dev/mmcblk0p9` @ sector 164352, hyp_b = `/dev/mmcblk0p10` @ 165376, **1024
+sectors / 512 KiB each**. This matches `unoq-bootloader-emmc-linux-251020/`'s
+`rawprogram0.xml`. It does **NOT** match
+`qcom-deb-images/flash_qrb2210-arduino-imola_emmc/rawprogram0.xml`, which
+describes an 8 MiB layout at different offsets — restoring with that XML would
+clobber neighbouring partitions.
+
+**Blank-zeros does NOT work — QHEE is mandatory to XBL.** `dd`ing zeros over
+both hyp slots makes XBL walk its A/B fallback and give up:
+`Using boot chain :: Primary` → *"...corrupted..."* → recovery → *"Both Primary
+and Recovery chains are corrupted. Entering EDL mode"* (seen on the Glasgow UART
+console). XBL fails at **format-parse** (no valid ELF/MBN header), before auth.
+Board drops to EDL — recoverable, but no boot.
+
+**XBL accepts a qtestsign-signed custom hyp — PROVEN (secure boot off).** Took
+the stock `hyp.mbn`, re-signed it with `qtestsign -v6 hyp` (dummy cert chain,
+stub signature), flashed to both hyp slots over EDL → **board booted normally to
+login**, modem/adsp `running`, wlan0 up. This confirms the whole custom-hyp
+pipeline: XBL checks the hash-segment format + segment hashes but skips signature
+verification when secure boot is off (matches `SecureBoot=0`, empty
+`/boot/efi/loader/keys/`). Still EL1, because the *content* is stock QHEE.
+
+- **Signing:** MBN **version 6**, SHA384, `hyp` sw_id `0x15`. Determined by
+  decoding the stock hash-segment header (`version=6`, `hash_size=0xc0`=4×48B for
+  the 4 phdrs, two `0xffffffff` unused-addr fields) — a perfect
+  `qtestsign/mbn/hashseg.py:HashSegmentV6` match. `qtestsign -v6` is correct; no
+  guessing.
+- **QHEE load/entry:** ELF `EXEC`, entry + code LOAD at `0x45740000` (offset
+  0x40000 into the 6 MiB `0x45700000` carveout), ~359 KiB.
+- **TZ→hyp handoff (from disassembling the QHEE entry):** TZ enters hyp **at
+  EL2** (first real insn writes `vbar_el2`). All cores funnel through the same
+  entry, picking a per-core stack via `vmpidr_el2` (0x2000/core). Entry preserves
+  `x0→x21, x1→x22, x2→x20` — i.e. TZ passes **x0 = next-stage (EL1) entry,
+  x1 = exec-state, x2/x3 = args**, the same register contract MSM8916 qhypstub
+  relies on. So the qhypstub approach is architecturally applicable here.
+
+**Remaining step to actually get KVM: a QCM2290 qhypstub port.** qhypstub
+(`github.com/msm8916-mainline/qhypstub`, ~280 lines aarch64 asm) is a minimal
+EL2 stub that replaces QHEE and returns the next stage to **EL2** instead of EL1,
+leaving EL2 for the kernel's hyp stub → KVM. Officially MSM8916/MSM8939 only;
+porting needs: HYP base → `0x45740000` (known); the RPM-reset workaround is
+likely N/A here (XBL already brings up RPM); **unknown/empirical:** whether
+QCM2290 TZ re-forces EL1 on the state switch (the MSM8916 "stage-2 ping-pong"
+workaround) and whether its secondary-core state-switch SMCs
+(`0x2000010F`, `0x86004242`) exist — discoverable via the UART+EDL loop, since
+all cores re-enter the hyp entry on PSCI `CPU_ON`. Sign with `qtestsign -v6 hyp`,
+flash to both slots. **This is unshipped firmware dev with brick/recover cycles,
+not a config flag** — approached but not yet done.
+
+**Recovery tooling (`hyp-backup/`):**
+- `hyp_a.bin` / `hyp_b.bin` — byte-exact backups of stock hyp (= stock
+  `hyp.mbn` zero-padded to 512 KiB; sha256 verified).
+- `restore-hyp.sh` — reboots to EDL (`enter-qdl.sh`), unbinds qcserial, flashes
+  stock `hyp.mbn` back to both slots via `qdl` + `rawprogram-hyp.xml`.
+- `rawprogram-hyp.xml` — minimal firehose XML, correct 1024-sector geometry,
+  stock `hyp.mbn`. `rawprogram-hyp-testsigned.xml` — same but the re-signed
+  image (what's on the board now). Both dry-run + real-flash verified.
+- If the board still boots Linux, skip EDL: just `dd` the backups back over
+  `/dev/mmcblk0p9`/`p10` via adb.
+
+**Note:** the board currently runs the qtestsign-re-signed *stock* QHEE (still
+EL1, fully functional) — the enabling-test image, not the untouched original.
+A full `build-image.sh` + `flash.sh` reflash writes stock `hyp.mbn` back and
+reverts this.
+
+**Also out of scope for a kernel rebuild (flagged):** once EL2 is freed, the
+now-unused `hyp_mem` 6 MiB carveout and the bogus `GIC_PPI 0` hyp-timer entry in
+`agatti.dtsi` could be reclaimed/fixed.
+
+## Demo board state (2026-10-26, Phase 0 of demo integration — see demo/)
+
+- SSH: `demo/bssh` (root@192.168.1.199 wired USB-Ethernet `enx6c1ff7bc45b1`; .209 = wlan0).
+- Kernel `7.2.0-rc5-next-20260730-test-tpm-…-dirty` (ashen-drv-tpm build, Oct 7). Cmdline has
+  `crashkernel=64M@0x80000000 qcom_scm.download_mode=full crash_memaction=secret`; the latter is
+  "Unknown" — this kernel has no CRASH_MEMACTION. `kexec_crash_loaded`=0.
+- **KVM works**: `Hyp nVHE mode initialized successfully`, `/dev/kvm` present → kvm-hvc-poc firmware is flashed.
+- ashen-tamper bound to `serial0-0` (so no `/dev/ttyHS1`), but **handshake times out every 10 s**;
+  `status: connected 0`. No `/dev/tpm*`. MCU flash vector table: SP=0x200c0000, reset=0x08000239.
+- arduino-router + arduino-app-cli still enabled. Router's generated drop-in (`10-imola.conf`) drives
+  MCU GPIOs on gpiochip1: 37=0 before start (likely BOOT0), 70=1 "ready"; on stop it sets 70=0 and
+  pulses 38 (likely MCU NRST) → **stopping the router (e.g. at shutdown) resets the MCU** = TPM loss.
+- Display: msm/anx7625 loaded as modules. Tools present: kexec, cryptsetup, podman, arduino-debug (OpenOCD
+  over gpiod SWD, tcl port 6666). Not present: tpm2-tools, crun.
+- Rootfs 20G (7.1G free), ESP 488M (147M free), RAM 3.6G.
+
+### MCU link: SoC TX does not reach MCU RX (2026-10-26)
+- Schematic ABX00162 (p9 + p19): direct 1.8 V link, no level shifter: SoC GPIO_71 (SE2 TX) -> R2504 0R -> PG8
+  (LPUART1_RX); PG7 -> R2503 -> GPIO_80; GPIO_6/7 <-> PG6/PG5 (CTS/RTS). GPIO_37/38 = MCU BOOT0/NRST via
+  TXS0104 U1101 (also SWD); GPIO_70 = MCU_SPI3_RDY (PG13), not a UART enable.
+- Measured: TLMM gpio71 func1/oe=1, pad IN=1 (SoC drives idle-high). MCU PG8 (AF8, no pull) reads 0, follows
+  internal pull-up/-down when enabled => floating: open between GPIO_71 and PG8 (R2504?). MCU RX DMA never
+  receives a byte; GENI SE2 TX completes normally. MCU->SoC (PG7->GPIO_80) reads high as expected.
+- Schematic re-read from rendered drawings (p9 + p19 of ABX00162-schematics.pdf), confirms GPIO_71 -> R2504 -> PG8.
+- Wire tests with /dev/mem (TLMM) + gdb (MCU GPIO), both directions, all restored afterwards:
+  PG7 -> GPIO_80 OK; GPIO_7 -> PG5 OK (held low); SPI3 -> PG9/PG13 OK.
+  GPIO_71 (GPIO mode, driven 0/1) -> PG8 (pull-up and pull-down): no change; no MCU pin on A-I follows.
+  PG8 (output 0/1) -> GPIO_71 (input, pull-up): no change.  => no continuity GPIO_71 <-> PG8 as seen from both ends.
+- Root cause: R2504 bad (seen under microscope), replaced with a wire link 2026-10-27; link handshakes since.
+  Re-test any time with demo/wiretest.py (copy to board, run as root).
