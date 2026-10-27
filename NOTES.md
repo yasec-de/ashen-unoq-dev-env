@@ -735,6 +735,14 @@ now-unused `hyp_mem` 6 MiB carveout and the bogus `GIC_PPI 0` hyp-timer entry in
   sees a detach and removes VBUS (tVBUSOFF <= 650 ms) -> everything browns out.
 - TZ PSCI has no SYSTEM_RESET2, so no warm-reset workaround. Fix is power: feed 5V_SYS from DC_IN/VIN
   (or the 5V pin) so a VBUS drop no longer matters; or a coin cell/supercap on VCOIN + backup-SRAM seeds.
+- On VIN (2026-10-27): plain reboot -> MCU RCC_CSR no flags, volume unlocked with the TPM. PON_REASON1
+  still 0x03, so that flag alone does not mean the MCU lost power.
+- VIN alone cannot power the dock: 5V_USB_VBUS only feeds 5V_SYS through D2801. Q2801 switches 5V_SYS
+  to the PMIC/ANX USB_VBUS_IN, not to the connector. Arduino confirms the port is PD sink only
+  (forum.arduino.cc/t/1411831). With the unpowered dock: no typec partner, DP-1 disconnected, no USB.
+  The 5V pin is on 5V_USB_VBUS and does back-feed the port, but the ANX7625 is sink-only (Rd), so an
+  unpowered dock (also Rd) never attaches: no host role, no PD, no DP alt mode/HDMI.
+- Working setup: dock on its PD supply + board on VIN. The dock's VBUS drop at reset is now harmless.
 
 ### Modem "DOG detects stalled initialization" ~40 s after boot = qrtr HELLO race (2026-10-27, fixed)
 - Modem announces svc 43/66, then never queries the PD mapper (svc 64): it never learned it exists.

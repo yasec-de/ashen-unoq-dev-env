@@ -167,3 +167,6 @@ One line per change to code or target, ≤120 chars, timestamp first.
 2026-10-27T03:13 board: deployed demo kernel dd40cddc (qrtr pending-HELLO fix); removed qrtrdbg test kernel
 2026-10-27T03:13 NOTES: modem DOG crash root cause (qrtr HELLO race) + fix
 2026-10-27T03:14 verified: demo kernel 45ba3c7f boots with no modem crash, units active, payload staged
+2026-10-27T05:06 verified on VIN: reboot keeps MCU powered + TPM; dock w/o PD input dead (HW: no VBUS source)
+2026-10-27T05:06 NOTES: VIN power results, dock needs its own PD supply
+2026-10-27T05:06 ARCHITECTURE: power row (VIN + PD-powered dock)

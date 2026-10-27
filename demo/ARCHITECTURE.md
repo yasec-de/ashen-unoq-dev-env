@@ -18,6 +18,7 @@ TLS keys. The monitor shows the kernel console throughout.
 | Button on D10 = PB9 | Tamper sensor, external pull-up; pressed = low |
 | USB Ethernet + switch | Demo network, one laptop provides DHCP/internet |
 | Monitor (USB-C DP via anx7625) | Kernel console (`console=tty0`) |
+| Power: VIN (DC_IN) + PD-powered dock | VIN keeps the MCU (and its TPM) up when the dock drops VBUS at SoC reset; the USB-C port cannot source VBUS |
 
 ## Components
 
