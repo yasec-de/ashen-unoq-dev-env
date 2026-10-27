@@ -683,3 +683,26 @@ now-unused `hyp_mem` 6 MiB carveout and the bogus `GIC_PPI 0` hyp-timer entry in
   PG8 (output 0/1) -> GPIO_71 (input, pull-up): no change.  => no continuity GPIO_71 <-> PG8 as seen from both ends.
 - Root cause: R2504 bad (seen under microscope), replaced with a wire link 2026-10-27; link handshakes since.
   Re-test any time with demo/wiretest.py (copy to board, run as root).
+
+### ADSP (remoteproc1) fails with -22 since the QHEE teardown? (2026-10-27, open)
+- `qcom_q6v5_pas ab00000.remoteproc: error -22 initializing firmware qcom/qcm2290/adsp.mbn`: the PAS
+  INIT_IMAGE SCM call (`qcom_scm_pas_init_image`) fails; the ELF/mdt header itself is accepted.
+- ADSP came up on every captured 7.0 (Arduino tree) boot (May-Jul logs: "adsp is now up"); it fails on
+  both linux-next kernels tried (next-20260730, the Oct 7 kernel; next-20260922, the demo kernel), which
+  both ran *after* kvm-hvc-poc (patched QHEE tears itself down, Linux at EL2) was flashed on Aug 27.
+- Arduino's branches (incl. qcom-v7.2.11-arduino) carry no remoteproc/SCM/SoC driver patches missing from
+  next; upstream comment in qcom_scm.c: "For PIL calls the hypervisor creates SHM Bridges for the blob
+  buffers on behalf of Linux" -> hypothesis: ADSP PIL needs QHEE services that the teardown removed (the
+  modem's PIL still works). Same firmware blob (Debian backports adsp.mbn is byte-identical).
+- Test pending: boot slot B (stock QHEE + U-Boot) once. `qbootctl -s b` FAILED ("Failed to set active")
+  and the board did not come back from that reboot. Use `fastboot set_active b` (see A/B notes) instead.
+- Stock QHEE (hyp_b) strings confirm QHEE implements PIL for HLOS: pil_init_image_api_ns ->
+  pil_init_image_to_tz, PILSubsys_memAssign, SHM bridge create/delete around auth, and per-subsystem
+  assign handlers only for LPASS (pil_lpass_mem_assign) and video (pil_video_mem_assign) -- exactly the
+  two subsystems that fail with -22 (adsp, venus), while the modem (no QHEE handler) boots.
+- Upstream supports this case (Linux at EL2, no QHEE/Gunyah): 5c720260e840 "remoteproc: qcom: pas: Enable
+  Secure PAS support with IOMMU managed by Linux" + b019925838bc "qcom_scm: Add SHM bridge handling for
+  PAS when running without QHEE". Enabled by an `iommus` property on the remoteproc node (see the
+  *-el2.dtso overlays). Fix candidate (linux-demo a74da2ae): `&remoteproc_adsp { iommus = <&apps_smmu
+  0x1c0 0x0>; }` -- 0x1c0 = base of agatti's LPASS SID block (q6asm 0x1c1, fastrpc CBs 0x1c3+), by
+  analogy with lemans/monaco/talos where the PIL SID is the DSP block base.

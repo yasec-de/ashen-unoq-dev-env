@@ -124,3 +124,15 @@ One line per change to code or target, ≤120 chars, timestamp first.
 2026-10-28T05:41 demo/rootfs: journald Storage=volatile
 2026-10-28T06:00 board: bisect modem crash: re-enabled ModemManager, bluetooth, blueman
 2026-10-28T06:10 board: modem crash bisected to disabled ModemManager/bluetooth/blueman; re-enabled, 0 crashes
+2026-10-28T06:40 board: apt-get update
+2026-10-28T06:45 board: TEST: backports firmware-qcom-dsp adsp* -> /lib/firmware/updates/qcom/qcm2290 (revertable)
+2026-10-28T06:50 board: reverted firmware test (identical md5), removed /lib/firmware/updates/qcom
+2026-10-28T07:10 board: TEST boot of Oct 7 kernel (next-20260730) for ADSP; ASHEN_ARM=0, loader.conf saved
+2026-10-28T07:20 board: Oct 7 kernel also fails ADSP (-22); restored demo default + ASHEN_ARM=1, rebooted
+2026-10-28T07:40 demo/kernel/build.sh: KTEST=name test builds (own kernelrelease + export dir)
+2026-10-28T08:10 board: TEST qbootctl -s b (stock QHEE+U-Boot) to check ADSP without the QHEE teardown
+2026-10-28T08:40 board: !! after failed 'qbootctl -s b' + reboot: no ssh >20 min, HDMI black; needs power cycle
+2026-10-28T08:45 NOTES.md: ADSP investigation status
+2026-10-28T09:30 linux-demo: overlay: ADSP iommus <&apps_smmu 0x1c0 0> (EL2 PAS path); building
+2026-10-28T09:40 demo/test-kexec.sh: one-shot kexec test boots (no ESP changes)
+2026-10-28T09:50 NOTES.md: ADSP root-cause evidence (QHEE PIL handlers) + fix candidate

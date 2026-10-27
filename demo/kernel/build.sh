@@ -25,6 +25,12 @@ if [[ "$(cat "$SRC/.rev" 2>/dev/null)" != "$rev" ]]; then
 fi
 mkdir -p "$OUT"
 MAKE=(make -C "$SRC" O="$OUT" -j"$(nproc)" ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu-)
+# Test builds (KTEST=name): separate kernelrelease and export dir, so their modules never
+# overwrite the demo kernel's on the board. Booted with kexec only (see test-kexec.sh).
+if [[ -n "${KTEST:-}" ]]; then
+	MAKE+=(LOCALVERSION="-$KTEST")
+	EXPORT=/workspace/cache/out/kernel-test
+fi
 if [[ ! -f "$OUT/.config" || "$HERE/ashen-demo.config" -nt "$OUT/.config" ]]; then
 	cp /workspace/linux/.config "$OUT/.config"
 	"$SRC/scripts/kconfig/merge_config.sh" -O "$OUT" -m "$OUT/.config" "$HERE/ashen-demo.config"
