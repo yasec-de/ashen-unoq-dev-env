@@ -1,0 +1,4 @@
+# Partitions by GPT label (Arduino's eMMC layout). The rootfs image is smaller than its partition;
+# x-systemd.growfs grows it on first boot.
+PARTLABEL=rootfs	/		ext4	defaults,x-systemd.growfs	0	1
+PARTLABEL=efi		/boot/efi	vfat	umask=0077,shortname=winnt	0	2

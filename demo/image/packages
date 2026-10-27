@@ -1,0 +1,47 @@
+# Debian trixie packages on top of mmdebstrap's "important" variant. Base set follows Arduino's
+# qcom-deb-images recipe (qualcomm-linux-debian-rootfs.yaml) without desktop, audio, docker
+# and the Arduino App Lab stack; then what the demo itself needs.
+
+# boot, kernel, firmware
+systemd-boot
+systemd-boot-efi
+initramfs-tools
+kmod
+linux-base
+firmware-atheros
+firmware-qcom-soc
+# marks the A/B boot slot successful, so the bootloader stays on slot a (the KVM pair)
+qbootctl
+
+# hardware services (modem/Wi-Fi need rmtfs + tqftpserv on QCM2290)
+udev
+rmtfs
+tqftpserv
+wireless-regdb
+wpasupplicant
+network-manager
+netbase
+dosfstools
+e2fsprogs
+
+# admin
+openssh-server
+sudo
+locales
+less
+vim-tiny
+i2c-tools
+usbutils
+pciutils
+gpiod
+tcpdump
+ethtool
+curl
+python3
+
+# demo: TPM-sealed volume, wipe payload, Galene VM, MCU flashing
+cryptsetup-bin
+systemd-cryptsetup
+tpm2-tools
+kexec-tools
+openssl

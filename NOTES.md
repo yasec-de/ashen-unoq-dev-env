@@ -778,3 +778,16 @@ now-unused `hyp_mem` 6 MiB carveout and the bogus `GIC_PPI 0` hyp-timer entry in
   while !hello_sent; our HELLO is sent from a work item since next's 544d85de) -> returns, rest unsent.
 - linux-demo 45ba3c7f: flush the pending say_hello work before a non-HELLO send. 4/4 boots clean
   (was ~10 of 12 crashing). Upstream candidate (Fixes: 544d85de).
+
+### Reproducible demo image (2026-10-27)
+- demo/image/build-image.sh: inputs from source -> Arduino boot-binaries zip (hash-pinned) + kvm-hvc-poc
+  hyp/boot (slot a only) -> mmdebstrap trixie from snapshot.debian.org 20261026T000000Z on an arm64
+  builder (this VM has no binfmt_misc; default builder = the board, /home/arduino, ~4 min) ->
+  rootless mke2fs -d tarball / mkfs.vfat+mtools -> qdl flash dir with rawprogram0.xml rewritten.
+- Two builds from the same inputs: bit-identical esp/rootfs/userdata images and package manifest.
+- Arduino bits taken: arduino-unoq-radio-firmware 0.7.0-1 (Wi-Fi BDF override, initramfs hook; pinned
+  by SHA-512 from apt-repo.arduino.cc) and /opt/openocd from arduino-deb-images e7713f1.
+- Not yet boot-tested from eMMC: needs EDL + qdl from a USB host. After flashing, the MCU must be
+  erased once (new host Noise key).
+- Wipe payload is now position-independent; crashkernel=64M unpinned. With physical KASLR the EFI
+  stub put the kernel at 0x80f50000, inside the old fixed 0x80000000 window, in 1 of 3 tampers.

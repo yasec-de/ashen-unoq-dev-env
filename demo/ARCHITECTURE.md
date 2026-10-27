@@ -1,6 +1,6 @@
 # Ashen demo — architecture
 
-Status (2026-10-27): all parts run on the board; open items are listed in WORKLOG.md and the chat.
+Status (2026-10-27): all parts run on the board; `image/build-image.sh` builds a reproducible eMMC image.
 
 ## What the demo shows
 

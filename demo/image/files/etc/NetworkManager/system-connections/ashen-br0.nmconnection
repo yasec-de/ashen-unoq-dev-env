@@ -1,0 +1,20 @@
+[connection]
+id=ashen-br0
+type=bridge
+interface-name=br0
+
+[ethernet]
+
+[bridge]
+# the dock adapter's MAC: the office DHCP reservation for the board (192.168.1.17) uses it
+mac-address=6C:1F:F7:BC:45:B1
+stp=false
+
+[ipv4]
+method=auto
+
+[ipv6]
+addr-gen-mode=default
+method=auto
+
+[proxy]

@@ -194,3 +194,7 @@ One line per change to code or target, ≤120 chars, timestamp first.
 2026-10-27T06:38 zeroize: payload PIC (Makefile rejects abs relocs); crashkernel=64M unpinned (KASLR clash)
 2026-10-27T06:38 board: payload + deploy (cmdline crashkernel=64M) installed
 2026-10-27T06:49 image/: build-image.sh (mmdebstrap on arm64 builder + rootless images + qdl flash dir); first run
+2026-10-27T07:07 verified: payload at 0xfa000000: 4/4 tampers re-provision, reboot keeps TPM
+2026-10-27T07:07 wolftpm: rebased ashen-upstream onto upstream d7f73b5a (no fwtpm changes); fw rebuild pending
+2026-10-27T07:07 verified: image build OK (rootfs 209 s on board); 2nd build bit-identical (all .img + manifest)
+2026-10-27T07:07 verified: image rootfs on board (loop, ro): initrd has ath_bdf hook, demo tools, openocd present

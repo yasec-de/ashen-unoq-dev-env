@@ -1,0 +1,10 @@
+[connection]
+id=ashen-br0-port
+type=ethernet
+controller=br0
+interface-name=enx6c1ff7bc45b1
+port-type=bridge
+
+[ethernet]
+
+[bridge-port]
