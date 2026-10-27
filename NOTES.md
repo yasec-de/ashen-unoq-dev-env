@@ -684,7 +684,7 @@ now-unused `hyp_mem` 6 MiB carveout and the bogus `GIC_PPI 0` hyp-timer entry in
 - Root cause: R2504 bad (seen under microscope), replaced with a wire link 2026-10-27; link handshakes since.
   Re-test any time with demo/wiretest.py (copy to board, run as root).
 
-### ADSP (remoteproc1) fails with -22 since the QHEE teardown? (2026-10-27, closed: ADSP disabled)
+### ADSP (remoteproc1) fails with -22 since the QHEE teardown? (2026-10-27, fixed on branch adsp-q6ss)
 - `qcom_q6v5_pas ab00000.remoteproc: error -22 initializing firmware qcom/qcm2290/adsp.mbn`: the PAS
   INIT_IMAGE SCM call (`qcom_scm_pas_init_image`) fails; the ELF/mdt header itself is accepted.
 - ADSP came up on every captured 7.0 (Arduino tree) boot (May-Jul logs: "adsp is now up"); it fails on
@@ -734,6 +734,24 @@ now-unused `hyp_mem` 6 MiB carveout and the bogus `GIC_PPI 0` hyp-timer entry in
   or boot stock slot b once for comparison (needs fastboot from a USB host). Careful: a blind
   /dev/mem read of IMEM candidates (0x0c1x0000 / 0x146x0000) stalled the bus -> watchdog reset.
   Reboot hangs seen around it: see the zeroize payload UART timeout + watchdog backstop (ca0a070).
+- 2026-10-27, round 3: SOLVED (by hand). TZ's diag log: shared IMEM 0xc125720 holds its address
+  (0xc116000, 0x3000 bytes, tzdbg_t v9, plain text; demo/tzdiag.sh). It logs nothing for the ADSP and
+  its XPU/VMIDMT/NOC/SMMU-CB interrupt counters stay 0. After a failed start the carveout equals the
+  loaded image and all bss is still zero: the Q6 never ran. Cause: in stock QHEE, pil_auth_reset_api_ns
+  calls a per-subsystem bringUp after TZ's auth_reset; LPASS's (hyp.mbn 0x4574f294) clocks and starts
+  the Q6 itself: GCC 0x143a00c/0x143a008 (branches, not in gcc-qcm2290), LPASS 0xa78901c/0xa789020,
+  0xa783090 |= 0xf000, QDSP6SS (0xa400000) XO/SLEEP/CORE CBCR, 0xa955018/20 |= 4 (poll bit 0),
+  EVB 0xa95b000 = 1 / 0xa95b004 = entry >> 4, then CORE_START/BOOT_CMD and BOOT_STATUS (as in
+  qcom_q6v5_adsp.c). demo/adsp-qhee-boot.py replays it via /dev/mem while pas waits for the ready IRQ:
+  "remote processor adsp is now up", apr_audio_svc/fastrpc/IPCRTR glink channels appear, no faults.
+- Kernel version: linux-demo branch `adsp-q6ss` (on ashen-demo): pas maps qcom,iommu-static-map
+  (QHEE's stage 2 for SID 0x1c0) and runs QHEE's bringUp after auth_and_reset and its teardown
+  (0x45762970: Q6 clocks off, LPASS BCR pulse, AXI halt 0x362000, GCC BCR 0x14c0000) after shutdown;
+  regions via reg-names on the ADSP node. Autostart at boot, stop/start cycles and Galene all fine.
+  Needed: static map (without it the board resets on start). Not needed: VMID 6 on the S1 context,
+  hyp-assigning the carveout. Pitfalls: pas mem_reloc is the *link* address for relocatable images
+  (boot address = mem_phys + e_entry - mem_reloc), rproc->bootaddr is 0 for pas; a bad boot address
+  resets the board silently ~5 s later. Not in the demo kernel (ADSP stays disabled there).
 
 ### fwTPM lost on plain reboots = board power loss via the USB-C dock (2026-10-27)
 - MCU RCC_CSR after a plain `systemctl reboot` (flags cleared first): BORRST|PINRST = brown-out.

@@ -206,3 +206,13 @@ One line per change to code or target, ≤120 chars, timestamp first.
 2026-10-27T07:45 board: removed adspmap test kernel; demo kernel 7deec2ec default again
 2026-10-27T07:47 verified: demo kernel default again; armed, payload staged, unlocked, Galene .21 OK, DP on
 2026-10-27T07:47 NOTES: ADSP round 2 (QHEE S2 dump; static map+VMID 6+assign: no ready); linux-demo branches
+2026-10-27T08:00 board: tzdiag.sh (TZ diag dump via shared IMEM 0xc125720); boot adspmap test kernel
+2026-10-27T08:07 board: TEST adsp-qhee-boot.py (replay QHEE LPASS bringUp via /dev/mem) on adspmap kernel
+2026-10-27T08:08 board: ADSP up after QHEE bringUp replay (adsp-qhee-boot.py); NOTES round 3
+2026-10-27T08:12 board: test kernel q6ss (linux-demo a318b25b, pas starts/halts the agatti Q6); adspmap removed
+2026-10-27T08:25 board: q6ss kernel boot-looped (silent reset ~7s after ADSP start); demo kernel+DTB restored
+2026-10-27T08:25 board: q6ss entry -> own /dtb/q6ss.dtb; adsp.mbn renamed .off; oneshot boot q6ss
+2026-10-27T08:30 board: q6ss kernel rebuilt (db83cc29: boot address = relocated e_entry), oneshot via UART menu
+2026-10-27T08:41 board: q6ss.dtb without qcom,iommu-static-map/-vmid (test)
+2026-10-27T08:46 board: q6ss = clean branch adsp-q6ss bbb1691f (static map + Q6 start/halt), ADSP autostart test
+2026-10-27T08:48 linux-demo: branch adsp-q6ss (static map + Q6 start/halt); README/NOTES updated

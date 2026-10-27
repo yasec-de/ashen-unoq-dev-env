@@ -44,8 +44,9 @@ The tamper button (D10/PB9) wipes everything, and the board comes back with new 
 - **USB-C is host-only.** The self-powered dock never attaches as a Type-C partner, so the DTB runs
   dwc3 host-only (`dr_mode = "host"`, `usb-role-switch` removed). USB device mode (gadget, adb over
   USB-C) is unavailable. HDMI comes up at 1280x720.
-- **No audio.** The ADSP doesn't start under the patched hypervisor, so it, GPU, venus and audio are
-  disabled.
+- **No audio.** The demo kernel disables the ADSP, GPU, venus and audio. The ADSP itself works with
+  linux-demo branch `adsp-q6ss` (Linux does QHEE's Q6 start/halt and static stream map; see NOTES),
+  but that isn't in the demo kernel, and audio is untested.
 - **`/dev/tpmrm0` can't be used.** The fwTPM can't swap object contexts, so everything uses
   `/dev/tpm0`, one client at a time.
 - **No kexec for normal reboots.** It only works as the crash path into the wipe payload.
