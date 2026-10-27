@@ -5,7 +5,7 @@
 set -u
 B=/workspace/demo/bssh
 H=$($B --host)
-GALENE=${GALENE:-192.168.1.200}
+GALENE=${GALENE:-192.168.1.21}
 fp() { timeout 20 $B "echo | timeout 5 openssl s_client -connect $GALENE:8443 2>/dev/null | openssl x509 -noout -fingerprint -sha256 | cut -d= -f2"; }
 before=$(fp 2>/dev/null)
 $B 'cat /proc/sys/kernel/random/boot_id > /var/tmp/boot_id.before; sync'

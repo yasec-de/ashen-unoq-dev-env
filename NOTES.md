@@ -763,6 +763,9 @@ now-unused `hyp_mem` 6 MiB carveout and the bogus `GIC_PPI 0` hyp-timer entry in
   Tested with the dock uplink down for 30 s: lease 3 s after the link came back.
 - ashen-demo now re-extracts the staged guest tarball over the volume's rootfs when the tarball is
   newer (stamp rootfs/.image). Before, guest updates only landed after a re-provision.
+- Static DHCP mappings (office router): br0 6c:1f:f7:bc:45:b1 -> .17, wlan0 14:b5:cd:ea:b6:db -> .18,
+  Galene VM 02:a5:4e:00:00:01 (krunwipe default) -> .21. The tap and the Wi-Fi scan MACs are random
+  per start but never request a lease.
 - libkrun pitfall: taking the VM's tap down wedges virtio-net (guest "TX timeout" every 5 s, no
   recovery after the tap is back up). Don't use that as a test.
 - build-guest.sh is currently blocked: the galene outputs are gone from the buildns store, and

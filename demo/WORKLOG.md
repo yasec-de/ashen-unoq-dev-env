@@ -183,3 +183,6 @@ One line per change to code or target, ≤120 chars, timestamp first.
 2026-10-27T06:06 board: installed rootfs + guest tarball; volume image refreshed by hand
 2026-10-27T06:06 verified: uplink down 30 s at VM start -> Galene starts, lease + narration 3 s after link returns
 2026-10-27T06:06 NOTES/ARCHITECTURE: power topology, host-only USB DTB, DHCP retry, libkrun tap-down wedge
+2026-10-27T06:16 board: rebooted to pick up static DHCP mappings (.1.10-.25)
+2026-10-27T06:18 verified: DHCP reservations: br0 .17, wlan0 .18, Galene VM .21 (https 200); TPM unlock kept
+2026-10-27T06:18 bssh -> .17/.18, cycle-test GALENE -> .21
