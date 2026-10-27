@@ -24,7 +24,7 @@ TLS keys. The monitor shows the kernel console throughout.
 ## Components
 
 - **ashen-tamper** (kernel, `drivers/misc/ashen-tamper/`): serdev driver for the MCU link. Noise XX
-  session, Echo heartbeat (50 ms) with 100 ms timeout → `panic()`. Exposes the MCU TPM via
+  session, Echo heartbeat (50 ms) with 100 ms timeout → `panic()`; a `Tamper` message panics at once. Exposes the MCU TPM via
   **tpm_ashen** as `/dev/tpmrm0`.
 - **crash memaction** (kernel): `MADV_CRASH_SECRET` tags memory; kernel passes a page bitmap to
   the crash kernel as an ELF note `MEMACTION`.
@@ -44,8 +44,10 @@ TLS keys. The monitor shows the kernel console throughout.
 
 ## Alarm sequence
 
-1. Button → MCU logs `TAMPER`, wipes all SRAM (TPM seeds/NV, keys) and resets itself.
-2. Linux misses the heartbeat (≤100 ms) → `panic("TAMPER ALARM: …")` → straight into kexec. There's no
+1. Button → MCU sends a `Tamper` message (between frames, ≤5 ms), wipes all SRAM (TPM seeds/NV, keys)
+   and resets itself.
+2. Linux panics on that message at once (`panic("TAMPER ALARM: …")`; fallback: heartbeat lost, ≤100 ms)
+   → straight into kexec. There's no
    `crash_kexec_post_notifiers` because panic notifiers can hang on this SoC; the payload draws the red screen.
 3. kexec into the wipe payload: wipe tagged pages (VM RAM, disk keys), switch the display to a
    fetch-free solid red (only if a display was lit when the payload was staged), wipe the rest of RAM,

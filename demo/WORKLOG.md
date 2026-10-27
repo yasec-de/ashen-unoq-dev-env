@@ -219,3 +219,7 @@ One line per change to code or target, ≤120 chars, timestamp first.
 2026-10-27T09:21 board: apt install coturn (coturn.service masked) for the NAT'd Galene VM
 2026-10-27T09:22 board: Galene VM behind NAT (10.21.0.2, DNAT :8443) + ashen-turn (coturn :3478); reboot
 2026-10-27T09:27 board: tamper cycle test with the NATed Galene VM
+2026-10-27T12:30 ashen-fw 615f328: tamper sends a Tamper message (type 12) instead of a log line, then wipes
+2026-10-27T12:30 linux-demo 54820d0a (ashen-demo): driver panics at once on Tamper while armed
+2026-10-27T12:33 board: deployed kernel 54820d0a, flashed MCU 615f328 (disarmed first), rebooted, re-provisioned
+2026-10-27T12:38 board: tamper cycle with Tamper message: ok, Galene back after 49 s with new fingerprint
