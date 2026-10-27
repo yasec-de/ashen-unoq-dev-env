@@ -14,5 +14,16 @@ max-substitution-jobs = 4
 sandbox = false"
 # Without the sandbox, builds that touch $HOME (/homeless-shelter) leave it behind and nix then
 # refuses every later build; it's scratch, so drop it.
-rm -rf /dev/shm/ns/.nix-portable/emptyroot/homeless-shelter
-exec /workspace/cache/bin/nix-portable nix --extra-experimental-features 'nix-command flakes' "$@"
+HS=/dev/shm/ns/.nix-portable/emptyroot/homeless-shelter
+rm -rf "$HS"
+[ "$1" = build ] || exec /workspace/cache/bin/nix-portable nix --extra-experimental-features 'nix-command flakes' "$@"
+# A builder that writes to $HOME mid-run makes nix refuse the next derivation of the same run.
+# Everything built so far stays in the store, so clear it and go on.
+for try in 1 2 3 4 5 6 7 8; do
+	/workspace/cache/bin/nix-portable nix --extra-experimental-features 'nix-command flakes' "$@" && exit 0
+	rc=$?
+	[ -e "$HS" ] || exit $rc
+	echo "nix: $HS appeared during the build; removing it and retrying ($try)" >&2
+	rm -rf "$HS"
+done
+exit $rc

@@ -186,3 +186,7 @@ One line per change to code or target, ≤120 chars, timestamp first.
 2026-10-27T06:16 board: rebooted to pick up static DHCP mappings (.1.10-.25)
 2026-10-27T06:18 verified: DHCP reservations: br0 .17, wlan0 .18, Galene VM .21 (https 200); TPM unlock kept
 2026-10-27T06:18 bssh -> .17/.18, cycle-test GALENE -> .21
+2026-10-27T06:26 nix wrapper: retry 'nix build' when /homeless-shelter appears mid-run; build-guest.sh works again
+2026-10-27T06:26 guest tarball rebuilt by build-guest.sh (same file list; new init/udhcpc.script)
+2026-10-27T06:26 README.md: setup, tools, limitations; ARCHITECTURE: no crash_kexec_post_notifiers (payload draws red)
+2026-10-27T06:26 doc: upstream candidates review (claude.ai/artifact/FrTt1o1dJ7KQZKhFivn5rf)

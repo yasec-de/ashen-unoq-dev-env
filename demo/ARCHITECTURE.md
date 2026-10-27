@@ -44,8 +44,8 @@ TLS keys. The monitor shows the kernel console throughout.
 ## Alarm sequence
 
 1. Button → MCU logs `TAMPER`, wipes all SRAM (TPM seeds/NV, keys) and resets itself.
-2. Linux misses the heartbeat (≤100 ms) → `panic("TAMPER ALARM: …")`. With `crash_kexec_post_notifiers`,
-   drm_panic first draws the panic screen (red, white text) on the console display.
+2. Linux misses the heartbeat (≤100 ms) → `panic("TAMPER ALARM: …")` → straight into kexec. There's no
+   `crash_kexec_post_notifiers` because panic notifiers can hang on this SoC; the payload draws the red screen.
 3. kexec into the wipe payload: wipe tagged pages (VM RAM, disk keys), switch the display to a
    fetch-free solid red (only if a display was lit when the payload was staged), wipe the rest of RAM,
    PSCI reset. Measured: kernel running again ~4 s after the panic; Galene back with a new TLS key ~70 s.
