@@ -56,8 +56,11 @@ if [[ -f "$W/wifi.nmconnection" ]]; then
 fi
 chmod 600 "$R"/etc/NetworkManager/system-connections/* 2>/dev/null || true
 chrun systemctl enable zeroize-stage.service ashen-pair.service ashen-demo.service \
-	ashen-galene-vm.service qbootctl.service 2>/dev/null ||
-	chrun systemctl enable zeroize-stage.service ashen-pair.service ashen-demo.service ashen-galene-vm.service
+	ashen-turn.service ashen-galene-vm.service qbootctl.service 2>/dev/null ||
+	chrun systemctl enable zeroize-stage.service ashen-pair.service ashen-demo.service \
+	ashen-turn.service ashen-galene-vm.service
+# ashen-turn runs its own coturn instance; Debian's would hold port 3478
+chrun systemctl mask coturn.service
 
 # initramfs last, so it carries the radio firmware hook; systemd-boot's initramfs hook must not
 # run kernel-install (the ESP entry is written by hand)

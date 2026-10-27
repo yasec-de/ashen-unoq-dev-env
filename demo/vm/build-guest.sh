@@ -15,7 +15,7 @@ echo "galene=$galene busybox=$busybox openssl=$openssl"
 R=/dev/shm/ns/guest-rootfs
 rm -rf "$R"; mkdir -p "$R"/{bin,proc,tmp,dev,etc,srv/galene/data}
 cp "$STORE$busybox/bin/busybox" "$R/bin/"
-for a in sh mount cat cut ls echo chmod mkdir sleep date ip awk grep udhcpc tail; do ln -s busybox "$R/bin/$a"; done
+for a in sh mount cat cut ls echo chmod mkdir sleep date ip awk grep tail; do ln -s busybox "$R/bin/$a"; done
 cp "$STORE$galene/bin/galene" "$STORE$openssl/bin/openssl" "$R/bin/"
 # Galene's web client is the package's separate "static" output.
 gsrc=$(find "$STORE$galene_web" -name index.html -printf '%h\n' | head -1)

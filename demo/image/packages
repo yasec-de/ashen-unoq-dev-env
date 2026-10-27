@@ -45,3 +45,6 @@ systemd-cryptsetup
 tpm2-tools
 kexec-tools
 openssl
+# Galene VM networking: NAT and the TURN relay for WebRTC media
+nftables
+coturn

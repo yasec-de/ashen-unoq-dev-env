@@ -216,3 +216,6 @@ One line per change to code or target, ≤120 chars, timestamp first.
 2026-10-27T08:41 board: q6ss.dtb without qcom,iommu-static-map/-vmid (test)
 2026-10-27T08:46 board: q6ss = clean branch adsp-q6ss bbb1691f (static map + Q6 start/halt), ADSP autostart test
 2026-10-27T08:48 linux-demo: branch adsp-q6ss (static map + Q6 start/halt); README/NOTES updated
+2026-10-27T09:21 board: apt install coturn (coturn.service masked) for the NAT'd Galene VM
+2026-10-27T09:22 board: Galene VM behind NAT (10.21.0.2, DNAT :8443) + ashen-turn (coturn :3478); reboot
+2026-10-27T09:27 board: tamper cycle test with the NATed Galene VM

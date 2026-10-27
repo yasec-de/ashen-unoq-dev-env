@@ -44,5 +44,6 @@ binfmt_misc). By default that's the demo board itself (`BUILDER=root@host`, work
   erased once. Flash `/usr/local/share/ashen/ashen-fw.elf` with `demo/mcu-flash.sh`, or press the
   tamper button. After that, pairing is trust-on-first-use, and the first boot provisions the
   volume.
-- Network: wired via the dock is a bridge `br0` with the VM on it (`files/etc/NetworkManager`).
+- Network: wired via the dock is a bridge `br0` (`files/etc/NetworkManager`); the VM is NATed behind
+  the board and Galene is at `https://<board>:8443/`.
   Wi-Fi only if built with `WIFI_PROFILE`.

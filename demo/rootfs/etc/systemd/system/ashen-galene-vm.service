@@ -1,11 +1,12 @@
 [Unit]
 Description=Ashen: Galene in a tagged-memory microVM
-Requires=ashen-demo.service
-After=ashen-demo.service network-online.target
+Requires=ashen-demo.service ashen-turn.service
+After=ashen-demo.service ashen-turn.service network-online.target
 
 [Service]
 ExecStart=/usr/local/sbin/ashen-galene-vm
 ExecStopPost=-/usr/sbin/ip link del ashen-tap0
+ExecStopPost=-/usr/sbin/nft delete table ip ashen
 Restart=on-failure
 RestartSec=2
 

@@ -37,9 +37,10 @@ TLS keys. The monitor shows the kernel console throughout.
 - **systemd units** (`demo/rootfs/`): `zeroize-stage` (stage payload) → `ashen-pair` (host key, TOFU
   pairing, TPM, arm heartbeat) → `ashen-demo` (unlock or provision the LUKS volume) → `ashen-galene-vm`.
   Every step is narrated on the console via `/dev/kmsg` (KERN_NOTICE, console loglevel 6).
-- **Network**: USB Ethernet is enslaved to bridge `br0` (host keeps its DHCP lease); the VM's tap NIC sits
-  on `br0` and gets its own DHCP address, so WebRTC to the laptops needs no NAT or port forwarding.
-  The guest retries DHCP in the background until a lease arrives; Galene starts regardless.
+- **Network**: USB Ethernet is enslaved to bridge `br0`, which holds the board's DHCP lease. The VM's tap is
+  a private /30 (host 10.21.0.1, guest 10.21.0.2, static); nftables DNATs the board's :8443 to Galene and
+  masquerades the guest. WebRTC media goes through coturn on the board (`ashen-turn`, :3478, per-boot
+  shared secret handed to Galene as `ice-servers.json`); its relay sockets live on the board's LAN address.
 
 ## Alarm sequence
 

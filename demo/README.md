@@ -16,7 +16,11 @@ The tamper button (D10/PB9) wipes everything, and the board comes back with new 
   |---|---|---|
   | Board, wired (`br0`) | `6c:1f:f7:bc:45:b1` | 192.168.1.17 |
   | Board, Wi-Fi | `14:b5:cd:ea:b6:db` | 192.168.1.18 |
-  | Galene VM | `02:a5:4e:00:00:01` | 192.168.1.21 → `https://192.168.1.21:8443/` |
+
+  Galene is at `https://192.168.1.17:8443/`. The VM sits behind the board on a private /30 (guest
+  10.21.0.2); the board forwards port 8443 to it (nftables table `ashen`) and relays WebRTC media
+  through its own TURN server (`ashen-turn`, coturn on 3478/udp+tcp, per-boot shared secret).
+  Laptops need to reach 8443/tcp, 3478/udp+tcp and the relay ports 49152-65535/udp on the board.
 
 - **Tamper button:** D10 to GND, external pull-up.
 
@@ -52,5 +56,5 @@ The tamper button (D10/PB9) wipes everything, and the board comes back with new 
 - **No kexec for normal reboots.** It only works as the crash path into the wipe payload.
 - **Don't take the VM's tap down.** libkrun's virtio-net stops for good, even after the tap is back up.
   Restart `ashen-galene-vm` instead.
-- **Office DHCP is flaky.** The server sometimes ignores a client for a while. The guest retries in
-  the background, and Galene announces its address on the console once it has a lease.
+- **Office DHCP is flaky.** The server sometimes ignores a client for a while. Only the board itself
+  needs a lease (the VM is behind NAT), and it has kept its .17 mapping reliably.
