@@ -157,3 +157,13 @@ One line per change to code or target, ≤120 chars, timestamp first.
 2026-10-27T02:08 board: hard reset via Glasgow (reboot cycle 2 ended on red payload screen, no reset)
 2026-10-27T02:14 board: payload (UART 1ms timeout, wdt 10s backstop) + ashen-pair ExecStop disarm installed
 2026-10-27T02:30 verified: 1 tamper + 3 reboot cycles OK with new payload/ExecStop (reboot 2: no VM DHCP lease)
+2026-10-27T02:36 MCU: cleared RCC_CSR reset flags (reboot reset-cause experiment)
+2026-10-27T02:47 board: modem stop/start with qrtr tracing (crash investigation)
+2026-10-27T02:48 board: removed -assign test kernel from ESP
+2026-10-27T02:49 board: deployed KTEST=qrtrdbg kernel (qrtr/pd-mapper logging) as default
+2026-10-27T02:56 NOTES: fwTPM loss on reboot root-caused to USB-C dock dropping VBUS (SMPL/BOR)
+2026-10-27T03:01 board: redeployed KTEST=qrtrdbg (+ns hello/announce logging)
+2026-10-27T03:05 board: deployed KTEST=qrtrdbg with qrtr pending-HELLO fix + debug
+2026-10-27T03:13 board: deployed demo kernel dd40cddc (qrtr pending-HELLO fix); removed qrtrdbg test kernel
+2026-10-27T03:13 NOTES: modem DOG crash root cause (qrtr HELLO race) + fix
+2026-10-27T03:14 verified: demo kernel 45ba3c7f boots with no modem crash, units active, payload staged

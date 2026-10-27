@@ -718,6 +718,27 @@ now-unused `hyp_mem` 6 MiB carveout and the bogus `GIC_PPI 0` hyp-timer entry in
 - gcc_lpass_aggre_tbu_clk (QHEE clock table) is already on; qcm2290 has no LPASS TBU GDSC.
 - Not needed for the demo: linux-demo 5e1d1502 disables &remoteproc_adsp. Left: RE of QHEE's AC/SMMU
   static config for LPASS SIDs, or TZ's PIL/xPU log.
-- Modem: one "DOG detects stalled initialization" fatal ~60 s after every boot (ADSP on-but-failing or
-  off), recovers in 0.2 s, Wi-Fi survives; prints 3 err lines on the HDMI console. 01:12 boot had none.
-  Two plain reboots after such a crash hung silently (no UART after shutdown, no HDMI); a verbose one passed.
+- Modem DOG crash: unrelated to the ADSP, see the qrtr HELLO race below.
+  Reboot hangs seen around it: see the zeroize payload UART timeout + watchdog backstop (ca0a070).
+
+### fwTPM lost on plain reboots = board power loss via the USB-C dock (2026-10-27)
+- MCU RCC_CSR after a plain `systemctl reboot` (flags cleared first): BORRST|PINRST = brown-out.
+- PM4125 PON_REASON1 (0x808) = 0x03 = HARD_RESET|SMPL ("sudden momentary power loss") on 3/3 reboots.
+- UART: every such reboot runs XBL twice; the first run dies ~0.6 s in (right after "OEM_MISC Image
+  Loaded", at the PMIC init) and restarts from power-on. The one reboot with a single XBL run kept the
+  TPM ("volume unlocked: existing VM image and TLS key reused").
+- Schematic (ABX00162): MCU VDD = PWR_3P3V <- TPS62A02 <- PWR_3P8V <- TPS62A02 <- 5V_SYS, which is
+  diode-ORed from 5V_USB_VBUS (USB-C) and 5V_BUCK_OUT (DC_IN 6-24 V via LMR51440). No SoC-controlled enable.
+  MCU VBAT = PMIC VCOIN (also on JMISC); nothing on it, so the STM32 backup domain dies too.
+- USB-C CC is handled by the ANX7625, powered from SoC PMIC rails (L11A/L15A) + SoC GPIO reset. The SoC
+  reset drops those rails -> Rd disappears -> the dock (Type-C sink, default power, no PD contract)
+  sees a detach and removes VBUS (tVBUSOFF <= 650 ms) -> everything browns out.
+- TZ PSCI has no SYSTEM_RESET2, so no warm-reset workaround. Fix is power: feed 5V_SYS from DC_IN/VIN
+  (or the 5V pin) so a VBUS drop no longer matters; or a coin cell/supercap on VCOIN + backup-SRAM seeds.
+
+### Modem "DOG detects stalled initialization" ~40 s after boot = qrtr HELLO race (2026-10-27, fixed)
+- Modem announces svc 43/66, then never queries the PD mapper (svc 64): it never learned it exists.
+- ns.c announce_servers() on the modem's HELLO: first send -EAGAIN (qrtr_node_enqueue drops everything
+  while !hello_sent; our HELLO is sent from a work item since next's 544d85de) -> returns, rest unsent.
+- linux-demo 45ba3c7f: flush the pending say_hello work before a non-HELLO send. 4/4 boots clean
+  (was ~10 of 12 crashing). Upstream candidate (Fixes: 544d85de).
