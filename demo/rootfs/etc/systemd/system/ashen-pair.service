@@ -3,12 +3,16 @@ Description=Ashen: pair with tamper MCU, bring up its TPM, arm heartbeat
 DefaultDependencies=no
 After=systemd-modules-load.service local-fs.target zeroize-stage.service
 Wants=zeroize-stage.service
-Before=ashen-demo.service
+Before=ashen-demo.service shutdown.target
+Conflicts=shutdown.target
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
 ExecStart=/usr/local/sbin/ashen-pair
+# Disarm at the start of an orderly shutdown (stopped right after the VM and volume), not
+# only in the driver's late .shutdown: a stall later in shutdown must not read as a tamper.
+ExecStop=/bin/sh -c 'for a in /sys/bus/serial/drivers/ashen-tamper/*/armed; do echo 0 > "$a"; done'
 
 [Install]
 WantedBy=multi-user.target

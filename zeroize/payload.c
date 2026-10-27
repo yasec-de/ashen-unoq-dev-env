@@ -42,6 +42,11 @@ typedef unsigned long u64;
  * the bark/bite counter; the full-RAM wipe is long enough to trip it unpetted. */
 #define WDT_BASE		0x0f017000UL
 #define WDT_RST			0x4	/* qcom,kpss-wdt layout */
+#define WDT_EN			0x8
+#define WDT_BARK_TIME		0x10
+#define WDT_BITE_TIME		0x14
+#define WDT_RATE		32768	/* sleep clock */
+#define WDT_BACKSTOP_S		10
 
 /* Display controller (qcm2290 DPU 6.5, mdp @ 0x5e01000; offsets from the msm dpu catalog).
  * Staging only the layer mixer's border colour makes the panel show a solid colour without any
@@ -114,17 +119,40 @@ static inline u64 rd_cntfrq(void) { u64 v; asm volatile("mrs %0, cntfrq_el0" : "
  * default) or MMU-on (WDT_BASE mapped Device in build_tables). */
 static void wdt_pet(void) { writel(1, WDT_BASE + WDT_RST); }
 
+/* The panicked kernel leaves the watchdog off. Arm it (as qcom_wdt_start does) so that if
+ * anything below stalls, or PSCI SYSTEM_RESET never resets, the bite still reboots. */
+static void wdt_arm(void)
+{
+	writel(0, WDT_BASE + WDT_EN);
+	writel(1, WDT_BASE + WDT_RST);
+	writel(WDT_BACKSTOP_S * WDT_RATE, WDT_BASE + WDT_BARK_TIME);
+	writel(WDT_BACKSTOP_S * WDT_RATE, WDT_BASE + WDT_BITE_TIME);
+	writel(1, WDT_BASE + WDT_EN);
+}
+
 /* --- UART (polled GENI TX, modeled on qcom_geni_serial_poll_put_char) --- */
+/* The panicked kernel can leave the GENI TX engine wedged (see GENI-UART-TX-FLUSH-BUG.md):
+ * then M_CMD_DONE never comes. Give each char 1 ms (it takes ~87 us) and drop the UART for
+ * good on the first timeout, so a dead console can never keep the payload from resetting. */
+static int uart_dead;
 static void uart_putc(char c)
 {
+	u64 deadline;
+
+	if (uart_dead)
+		return;
 	if (c == '\n')
 		uart_putc('\r');
 	writel(M_CMD_DONE_EN, UART_BASE + SE_GENI_M_IRQ_CLEAR);
 	writel(1, UART_BASE + SE_UART_TX_TRANS_LEN);
 	writel(UART_START_TX << M_OPCODE_SHFT, UART_BASE + SE_GENI_M_CMD0);
 	writel((u32)(u8)c, UART_BASE + SE_GENI_TX_FIFOn);
+	deadline = rd_cntvct() + rd_cntfrq() / 1000;
 	while (!(readl(UART_BASE + SE_GENI_M_IRQ_STATUS) & M_CMD_DONE_EN))
-		;
+		if (rd_cntvct() > deadline) {
+			uart_dead = 1;
+			return;
+		}
 }
 
 static void uart_puts(const char *s) { while (*s) uart_putc(*s++); }
@@ -499,6 +527,8 @@ void payload_main(u64 dtb)
 	u64 t_tag, tagged;
 
 	u64 t0, t1, freq;
+
+	wdt_arm();
 
 	/* All of this runs MMU-off: writes hit DRAM directly. */
 	fdt_parse(dtb);
