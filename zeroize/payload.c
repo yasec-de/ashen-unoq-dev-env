@@ -11,7 +11,7 @@
  *      go straight to DRAM, no writeback worry, no read-for-ownership); our own
  *      region = Normal-WB (fast code/stack); UART + watchdog = Device; no-map
  *      carveouts left unmapped (writing them from EL1 would fault an xPU).
- *   3. Enable MMU+caches. Wipe the pages the crashed kernel tagged in its
+ *   3. Enable MMU+caches. Stop USB DMA (see usb_stop). Wipe the pages the crashed kernel tagged in its
  *      MEMACTION note (crash_memaction=secret: VM RAM, disk/TLS keys) first,
  *      then all of RAM (petting the watchdog), then PSCI SYSTEM_RESET.
  *
@@ -75,6 +75,19 @@ typedef unsigned long u64;
 #define DISPCC_MDSS_MDP_CBCR	0x2008
 #define GDSC_PWR_ON		(1u << 31)
 #define CBCR_CLK_OFF		(1u << 31)
+
+/* USB (dwc3 in host mode, xHCI at its base). The controller keeps DMAing (the dock's
+ * Ethernet always receives) into rings and buffers we are about to zero, and once they
+ * are gone it wedges the interconnect: our stores stall until something else resets
+ * the SoC. Halt it, then hold the whole block in reset, before wiping anything. */
+#define GCC_BASE		0x01400000UL
+#define GCC_USB30_PRIM_BCR	0x1a000
+#define GCC_USB30_PRIM_GDSCR	0x1a004
+#define GCC_USB30_PRIM_MASTER_CBCR 0x1a010
+#define GCC_CFG_NOC_USB3_AXI_CBCR 0x1a084
+#define XHCI_BASE		0x04e00000UL
+#define XHCI_USBCMD_RS		(1u << 0)
+#define XHCI_USBSTS_HCH		(1u << 0)
 
 #define SZ_2M			0x200000UL
 #define MASK_2M			(SZ_2M - 1)
@@ -341,6 +354,8 @@ static void build_tables(void)
 	if (display_active)
 		map_2m(MDP_BASE & ~MASK_2M, ATTR_DEVICE | PTE_XN);	/* also covers DISPCC */
 	map_2m(WDT_BASE & ~MASK_2M, ATTR_DEVICE | PTE_XN);
+	map_2m(GCC_BASE & ~MASK_2M, ATTR_DEVICE | PTE_XN);
+	map_2m(XHCI_BASE & ~MASK_2M, ATTR_DEVICE | PTE_XN);
 
 	/* RAM: our region WB+executable, wipe-set NC, no-map left unmapped. */
 	for (int i = 0; i < n_mem; i++) {
@@ -390,15 +405,29 @@ static void wipe_range(u64 p, u64 end)
 			"stp xzr, xzr, [%0, #48]\n"
 			:: "r"(p) : "memory");
 		p += 64;
-		if (p >= next_pet) { wdt_pet(); next_pet = p + 0x1000000; }
+		if (p >= next_pet) {
+			wdt_pet();
+			next_pet = p + 0x1000000;
+#ifdef WIPE_TRACE
+			uart_putc('.');
+#endif
+		}
 	}
 	while (p < end) { *(volatile u8 *)p = 0; p++; }
 }
 
 static void wipe_all(void)
 {
-	for (int i = 0; i < n_wipe; i++)
+	for (int i = 0; i < n_wipe; i++) {
+#ifdef WIPE_TRACE
+		uart_puts("\nw ");
+		uart_puthex(wipe[i].start);
+		uart_putc('-');
+		uart_puthex(wipe[i].end);
+		uart_putc(' ');
+#endif
 		wipe_range(wipe[i].start, wipe[i].end);
+	}
 }
 
 /* --- MEMACTION note (include/linux/crash_memaction.h wire format) --- */
@@ -494,6 +523,26 @@ static int display_powered(void)
 	       !(readl(DISPCC_BASE + DISPCC_MDSS_MDP_CBCR) & CBCR_CLK_OFF);
 }
 
+static void usb_stop(void)
+{
+	u64 g = GCC_BASE, deadline;
+
+	/* Only touch the controller while it is powered and clocked: unclocked MMIO stalls. */
+	if ((readl(g + GCC_USB30_PRIM_GDSCR) & GDSC_PWR_ON) &&
+	    !(readl(g + GCC_USB30_PRIM_MASTER_CBCR) & CBCR_CLK_OFF) &&
+	    !(readl(g + GCC_CFG_NOC_USB3_AXI_CBCR) & CBCR_CLK_OFF)) {
+		u64 op = XHCI_BASE + (readl(XHCI_BASE) & 0xff);	/* CAPLENGTH */
+
+		writel(readl(op) & ~XHCI_USBCMD_RS, op);
+		/* xHCI halts within 16 ms of clearing R/S */
+		deadline = rd_cntvct() + rd_cntfrq() / 50;
+		while (!(readl(op + 4) & XHCI_USBSTS_HCH) && rd_cntvct() < deadline)
+			;
+	}
+	writel(1, g + GCC_USB30_PRIM_BCR);
+	dsb_sy();
+}
+
 /* Solid red on the panel until reset, independent of RAM contents. */
 static void display_solid_red(void)
 {
@@ -548,6 +597,7 @@ void payload_main(u64 dtb)
 	 * fetches, stays red through the whole wipe until the reset. */
 	if (display_active)
 		display_solid_red();
+	usb_stop();
 
 	freq = rd_cntfrq();
 	t0 = rd_cntvct();

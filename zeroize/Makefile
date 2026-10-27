@@ -14,7 +14,7 @@ PAYLOAD_BASE   ?= 0x80000000
 
 CFLAGS := -ffreestanding -nostdinc -fno-pic -fno-stack-protector -fno-common \
 	  -mgeneral-regs-only -mno-outline-atomics -march=armv8-a \
-	  -O2 -Wall -Wextra
+	  -O2 -Wall -Wextra $(EXTRA_CFLAGS)
 LDFLAGS := -nostdlib -static -T payload.ld --defsym PAYLOAD_BASE=$(PAYLOAD_BASE)
 
 OBJS := start.o payload.o

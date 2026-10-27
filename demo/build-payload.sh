@@ -8,7 +8,7 @@ mountpoint -q /dev/shm/ns || exec "$HERE/buildns" run "$HERE/build-payload.sh" "
 B=/dev/shm/ns/zeroize
 rm -rf "$B"; mkdir -p "$B"
 cp /workspace/zeroize/{Makefile,payload.c,payload.ld,start.S} "$B/"
-make -C "$B"
+make -C "$B" EXTRA_CFLAGS="${EXTRA_CFLAGS:-}"
 mkdir -p /workspace/cache/out/zeroize
 cp "$B/Image" /workspace/cache/out/zeroize/Image
 aarch64-linux-gnu-nm -n "$B/payload.elf" | grep -E ' _end$| payload_main$'

@@ -223,3 +223,9 @@ One line per change to code or target, ≤120 chars, timestamp first.
 2026-10-27T12:30 linux-demo 54820d0a (ashen-demo): driver panics at once on Tamper while armed
 2026-10-27T12:33 board: deployed kernel 54820d0a, flashed MCU 615f328 (disarmed first), rebooted, re-provisioned
 2026-10-27T12:38 board: tamper cycle with Tamper message: ok, Galene back after 49 s with new fingerprint
+2026-10-27T12:40 board: anx7625 unbind/rebind test: board reset (likely panic), came back with DP-1, TPM intact
+2026-10-27T12:46 board: /dev/mem read of unclocked DPU stalled the bus, board reset (mistake; check DISPCC first)
+2026-10-27T13:00 zeroize: optional WIPE_TRACE progress output (EXTRA_CFLAGS); build-payload.sh passes EXTRA_CFLAGS
+2026-10-27T13:20 board: traced payload test runs (tamper, sysrq, Wi-Fi off, MCU link off, USB off): USB DMA stalls
+2026-10-27T13:31 zeroize: halt xHCI and assert GCC USB30 BCR before wiping; 5/5 sysrq + 3/3 tamper clean, HDMI ok
+2026-10-27T13:36 board: installed payload 3d240d6c (USB stop), restaged

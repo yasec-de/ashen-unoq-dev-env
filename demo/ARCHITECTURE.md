@@ -49,7 +49,8 @@ TLS keys. The monitor shows the kernel console throughout.
 2. Linux panics on that message at once (`panic("TAMPER ALARM: …")`; fallback: heartbeat lost, ≤100 ms)
    → straight into kexec. There's no
    `crash_kexec_post_notifiers` because panic notifiers can hang on this SoC; the payload draws the red screen.
-3. kexec into the wipe payload: wipe tagged pages (VM RAM, disk keys), switch the display to a
+3. kexec into the wipe payload: halt and reset the USB controller (its DMA into wiped rings otherwise
+   wedges the bus and the board ends in a watchdog reset that leaves HDMI dead), wipe tagged pages (VM RAM, disk keys), switch the display to a
    fetch-free solid red (only if a display was lit when the payload was staged), wipe the rest of RAM,
    PSCI reset. Measured: kernel running again ~4 s after the panic; Galene back with a new TLS key ~70 s.
 
