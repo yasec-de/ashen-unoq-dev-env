@@ -48,6 +48,8 @@ DTB="$OUT/qrb2210-arduino-imola-ashen-demo.dtb"
 fdtoverlay -i "$HERE/dtb/qrb2210-arduino-imola-base.dtb" -o "$DTB" \
 	"$HERE/dtb/qrb2210-arduino-imola-video_sound-usbc.dtbo" \
 	"$OUT/arch/arm64/boot/dts/qcom/qrb2210-arduino-imola-ashen-tamper.dtbo"
+# host-only USB (see the overlay); overlays can't delete properties
+fdtput -d "$DTB" /soc@0/usb@4ef8800/usb@4e00000 usb-role-switch
 krel=$("${MAKE[@]}" -s kernelrelease)
 
 rm -rf "$OUT/modinst"

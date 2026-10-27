@@ -170,3 +170,16 @@ One line per change to code or target, ≤120 chars, timestamp first.
 2026-10-27T05:06 verified on VIN: reboot keeps MCU powered + TPM; dock w/o PD input dead (HW: no VBUS source)
 2026-10-27T05:06 NOTES: VIN power results, dock needs its own PD supply
 2026-10-27T05:06 ARCHITECTURE: power row (VIN + PD-powered dock)
+2026-10-27T05:47 board: forced USB role host via usb_role sysfs (runtime only); dock AX88179B up, br0 .199
+2026-10-27T05:47 linux-demo 7deec2ec: dwc3 dr_mode=host in overlay; build.sh drops usb-role-switch (fdtput -d)
+2026-10-27T05:47 board: deployed demo kernel 7deec2ec (host-only USB DTB), rebooted
+2026-10-27T05:56 vm/guest: udhcpc retries in background every few s until a lease, keeps renewing; late lease narrated
+2026-10-27T05:56 ashen-demo: on unlock, refresh VM image on the volume if the staged tarball is newer (data/ kept)
+2026-10-27T05:56 guest tarball repacked with new init/udhcpc.script (nix galene rebuild blocked: homeless-shelter)
+2026-10-27T05:56 board: installed rootfs (ashen-demo, guest tarball); rebooting
+2026-10-27T06:06 verified: after reboot dock on USB3, AX88179B br0 .199, HDMI DP-1 1280x720 connected, TPM unlock kept
+2026-10-27T06:06 vm/guest: late-lease line written to /dev/console (udhcpc -b daemonizes onto /dev/null)
+2026-10-27T06:06 ashen-galene-vm: strip libkrun's init_or_kernel prefix so guest console narration reaches kmsg
+2026-10-27T06:06 board: installed rootfs + guest tarball; volume image refreshed by hand
+2026-10-27T06:06 verified: uplink down 30 s at VM start -> Galene starts, lease + narration 3 s after link returns
+2026-10-27T06:06 NOTES/ARCHITECTURE: power topology, host-only USB DTB, DHCP retry, libkrun tap-down wedge

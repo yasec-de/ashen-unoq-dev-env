@@ -62,6 +62,7 @@ provision() {
 	say "unpacking Galene VM image onto the encrypted volume"
 	mkdir -p "$MNT/rootfs"
 	tar -C "$MNT/rootfs" -xzf "$IMAGE"
+	touch "$MNT/rootfs/.image"
 	sync
 	touch "$MNT/$MARKER"
 	sync
@@ -79,6 +80,11 @@ for attempt in 1 2 3; do
 done
 if [ $unlocked = 1 ]; then
 	say "volume unlocked: existing VM image and TLS key reused"
+	# A newer image (updated guest init etc.) replaces the old one; tar leaves data/ (TLS key) be.
+	if [ "$IMAGE" -nt "$MNT/rootfs/.image" ]; then
+		say "updating the VM image on the volume"
+		tar -C "$MNT/rootfs" -xzf "$IMAGE" && touch "$MNT/rootfs/.image" && sync
+	fi
 else
 	provision
 fi

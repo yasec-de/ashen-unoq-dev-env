@@ -18,7 +18,8 @@ TLS keys. The monitor shows the kernel console throughout.
 | Button on D10 = PB9 | Tamper sensor, external pull-up; pressed = low |
 | USB Ethernet + switch | Demo network, one laptop provides DHCP/internet |
 | Monitor (USB-C DP via anx7625) | Kernel console (`console=tty0`) |
-| Power: VIN (DC_IN) + PD-powered dock | VIN keeps the MCU (and its TPM) up when the dock drops VBUS at SoC reset; the USB-C port cannot source VBUS |
+| Power: 9 V → VIN; board 5 V out → USB-A → dock PD input | VIN keeps the MCU (and its TPM) up across SoC resets; the USB-C port cannot source VBUS |
+| USB-C dock (hub, AX88179B GbE, HDMI) | dwc3 forced host-only in the DTB: the self-powered dock never attaches as a Type-C partner |
 
 ## Components
 
@@ -38,6 +39,7 @@ TLS keys. The monitor shows the kernel console throughout.
   Every step is narrated on the console via `/dev/kmsg` (KERN_NOTICE, console loglevel 6).
 - **Network**: USB Ethernet is enslaved to bridge `br0` (host keeps its DHCP lease); the VM's tap NIC sits
   on `br0` and gets its own DHCP address, so WebRTC to the laptops needs no NAT or port forwarding.
+  The guest retries DHCP in the background until a lease arrives; Galene starts regardless.
 
 ## Alarm sequence
 

@@ -13,14 +13,11 @@ cd /srv/galene
 
 # libkrun's virtio-net default MTU is 65520; the LAN is plain Ethernet.
 ip link set eth0 mtu 1500 up
-# libkrun's own DHCP client can give up before the LAN answers; retry with udhcpc, visibly.
-tries=0
-while ! ip -4 -o addr show eth0 2>/dev/null | grep -q inet; do
-	[ $tries -eq 0 ] && say "waiting for a DHCP lease on the demo LAN..."
-	udhcpc -i eth0 -q -n -t 3 -T 2 -s /etc/udhcpc.script >/dev/null 2>&1 && break
-	tries=$((tries + 1))
-	[ $tries -ge 10 ] && { say "WARNING: no DHCP lease on eth0, starting Galene anyway"; break; }
-done
+# The LAN's DHCP server sometimes ignores a client for a while. udhcpc tries 3 times, then
+# goes to the background (-b) and retries every few seconds until it gets a lease, which it
+# then keeps renewing; Galene listens on all addresses, so it starts without waiting.
+say "waiting for a DHCP lease on the demo LAN..."
+udhcpc -i eth0 -b -t 3 -T 2 -A 3 -s /etc/udhcpc.script 2>/dev/null
 
 if [ ! -s data/key.pem ]; then
 	say "[6/7] no TLS key on this volume: generating a new P-256 key + self-signed certificate"
@@ -35,7 +32,11 @@ fp=$(openssl x509 -in data/cert.pem -noout -fingerprint -sha256 | cut -d= -f2)
 say "TLS certificate SHA-256 fingerprint:"
 say "  $fp"
 ip=$(ip -4 -o addr show eth0 2>/dev/null | awk '{print $4}' | cut -d/ -f1)
-say "[7/7] Galene serving https://${ip:-?}:8443/"
+if [ -n "$ip" ]; then
+	say "[7/7] Galene serving https://$ip:8443/"
+else
+	say "[7/7] Galene started; no DHCP lease yet, still asking (address follows)"
+fi
 # All clients are on the same LAN as the VM's bridged NIC: no TURN relay needed.
 ulimit -n 65536 2>/dev/null
 exec galene -http :8443 -turn "" -data data -groups groups -static static

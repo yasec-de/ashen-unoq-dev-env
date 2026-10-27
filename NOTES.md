@@ -744,6 +744,31 @@ now-unused `hyp_mem` 6 MiB carveout and the bogus `GIC_PPI 0` hyp-timer entry in
   unpowered dock (also Rd) never attaches: no host role, no PD, no DP alt mode/HDMI.
 - Working setup: dock on its PD supply + board on VIN. The dock's VBUS drop at reset is now harmless.
 
+### Demo power and dock: host-only USB brings up Ethernet and HDMI (2026-10-27)
+- Power: 9 V -> VIN -> board 5 V regulation -> board 5 V out -> USB-A -> dock's PD power input. The dock
+  powers itself; the board's USB-C port only carries data/DP.
+- Even with the dock powered, the ANX7625 reads CC1=Rd, CC2=Ra (0x7e:0x46 = 0x21) and no VBUS: no
+  attach, no interrupt, and at probe anx7625_typec_register() sets the role switch to device.
+- Runtime `echo host > /sys/class/usb_role/4e00000.usb-role-switch/role` enumerated the dock
+  (Genesys hub, AX88179B, card reader) and br0 got its lease.
+- Persisted in the DTB (linux-demo 7deec2ec): overlay sets dwc3 dr_mode = "host", and build.sh runs
+  `fdtput -d` on usb-role-switch. Overlays can't delete properties, and without that deletion
+  anx7625 would defer forever waiting for a role switch that host-only dwc3 never registers. After a
+  reboot: USB 3 hub + AX88179B on the SS bus, DP-1 connected at 1280x720, console on HDMI. Device
+  mode (gadget/adb over USB-C) is gone with this DTB.
+- VM DHCP: the office server sometimes answers once and then ignores the client. The guest now runs
+  `udhcpc -b -t 3 -T 2 -A 3`: Galene starts without a lease, udhcpc keeps retrying every few seconds
+  and then renews. The hook announces a late lease through /dev/console, which the host forwarder
+  strips of libkrun's `[.. ERROR init_or_kernel]` prefix.
+  Tested with the dock uplink down for 30 s: lease 3 s after the link came back.
+- ashen-demo now re-extracts the staged guest tarball over the volume's rootfs when the tarball is
+  newer (stamp rootfs/.image). Before, guest updates only landed after a re-provision.
+- libkrun pitfall: taking the VM's tap down wedges virtio-net (guest "TX timeout" every 5 s, no
+  recovery after the tap is back up). Don't use that as a test.
+- build-guest.sh is currently blocked: the galene outputs are gone from the buildns store, and
+  rebuilding Go fails with "home directory '/homeless-shelter' exists". The tarball in cache/out was
+  repacked by hand with the new init/udhcpc.script (prev in galene-rootfs.tar.gz.prev).
+
 ### Modem "DOG detects stalled initialization" ~40 s after boot = qrtr HELLO race (2026-10-27, fixed)
 - Modem announces svc 43/66, then never queries the PD mapper (svc 64): it never learned it exists.
 - ns.c announce_servers() on the modem's HELLO: first send -EAGAIN (qrtr_node_enqueue drops everything

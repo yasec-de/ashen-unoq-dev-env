@@ -23,6 +23,8 @@ say "[5/7] starting Galene microVM (512 MiB guest RAM, all tagged secret)"
 	run "$ROOTFS" /init "$(date +%s)" 2>&1 |
 	while IFS= read -r line; do
 		# Narration goes to the console; Galene's own log lines only to the journal.
+		# Lines the guest writes to /dev/console come with a libkrun log prefix.
+		case "$line" in *"init_or_kernel] galene-vm:"*) line=${line#*init_or_kernel] } ;; esac
 		case "$line" in galene-vm:*|krunwipe:*) echo "<5>$line" > /dev/kmsg ;; esac
 		echo "$line"
 	done
