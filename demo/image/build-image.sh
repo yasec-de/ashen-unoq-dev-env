@@ -25,7 +25,7 @@ KEY=/workspace/id_ed25519_claude_vm
 SSH=(ssh -i "$KEY" -o BatchMode=yes "$BUILDER")
 STORE=/dev/shm/ns/.nix-portable
 nixout() { "$DEMO/nix" build --no-link --print-out-paths "$@"; }
-say() { echo "== $*"; }
+say() { echo "== $(date +%T) $*"; }
 
 # --- 1. inputs ---------------------------------------------------------------------------------
 if [[ -z "${SKIP_INPUTS:-}" ]]; then
@@ -86,6 +86,7 @@ tar -C "$ADI/debos-recipes/overlays/arduino-unoq-releases/opt" -cf "$S/openocd.t
 "${SSH[@]}" "rm -rf $BUILD_DIR && mkdir -p $BUILD_DIR"
 tar -C "$S" -cf - . | "${SSH[@]}" "tar -C $BUILD_DIR -xf -"
 "${SSH[@]}" "SNAPSHOT=$SNAPSHOT $BUILD_DIR/rootfs-build.sh $BUILD_DIR"
+say "fetching rootfs"
 "${SSH[@]}" "cat $BUILD_DIR/rootfs.tar" > "$S/rootfs.tar"
 "${SSH[@]}" "cat $BUILD_DIR/esp.tar" > "$S/esp.tar"
 "${SSH[@]}" "cat $BUILD_DIR/manifest" > "$IMG/manifest"
@@ -98,6 +99,7 @@ export SOURCE_DATE_EPOCH=$(date -u -d "${SNAPSHOT:0:8} ${SNAPSHOT:9:2}:${SNAPSHO
 	"$HERE/mkimages.sh" "$S" "$IMG/flash"
 python3 -I "$HERE/rawprogram.py" "$IMG/flash"
 rm -rf "$S"
+say "flash dir"
 (cd "$IMG/flash" && sha256sum hyp-hvc.mbn boot-el2.img esp.img rootfs.img userdata.img > SHA256SUMS)
 say "done: $IMG/flash (kernel $krel, Debian snapshot $SNAPSHOT)"
 cat "$IMG/flash/SHA256SUMS"

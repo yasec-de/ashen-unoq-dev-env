@@ -719,6 +719,20 @@ now-unused `hyp_mem` 6 MiB carveout and the bogus `GIC_PPI 0` hyp-timer entry in
 - Not needed for the demo: linux-demo 5e1d1502 disables &remoteproc_adsp. Left: RE of QHEE's AC/SMMU
   static config for LPASS SIDs, or TZ's PIL/xPU log.
 - Modem DOG crash: unrelated to the ADSP, see the qrtr HELLO race below.
+- 2026-10-27, round 2. QHEE's leftover SMMU state, dumped before arm-smmu resets it (branch
+  smmu-dump-test): QHEE programs stage-2-only context banks for the subsystems. SID 0x1c0 -> CB61 VMID 6
+  (ADSP_Q6), SIDs 0xe5 + 0x8a/0x11 -> CB60 VMID 0x16 (LPASS), others on CB51-58. The VMID 6 stage 2 maps
+  70 ranges besides the firmware: Q6/LPASS MMIO (0xab0xxxx...), 0xe000000 (16 MB), SMEM 0x46000000-
+  0x4614efff + 0x461cd000-0x461fffff, one non-identity page (IPA 0x1b21000 -> PA 0x1b12000). Tables at
+  0x7da08000+, which is plain System RAM to Linux, so QHEE's contexts can't simply be kept.
+- Reproduced all three QHEE behaviours (branch adsp-static-map): qcom,iommu-static-map in the ADSP's
+  IOMMU domain (/workspace/cache/adsp-s2-ranges.dtsi), qcom,iommu-vmid = <6> on its stage-1 context
+  (CBAR.VMID; Linux otherwise leaves 0 on S1 contexts), and the carveout assigned to VMIDs 6+0x16.
+  Still "start timed out"; no SMMU global or context faults. So the Q6 never runs, or is blocked
+  silently downstream (TZ names an LPASS_Q6_MPU xPU).
+- Next: find TZ's diag log (tz.mbn has TZ_DIAG / diag strings; the location isn't a fixed DT address),
+  or boot stock slot b once for comparison (needs fastboot from a USB host). Careful: a blind
+  /dev/mem read of IMEM candidates (0x0c1x0000 / 0x146x0000) stalled the bus -> watchdog reset.
   Reboot hangs seen around it: see the zeroize payload UART timeout + watchdog backstop (ca0a070).
 
 ### fwTPM lost on plain reboots = board power loss via the USB-C dock (2026-10-27)

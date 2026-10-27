@@ -198,3 +198,11 @@ One line per change to code or target, ≤120 chars, timestamp first.
 2026-10-27T07:07 wolftpm: rebased ashen-upstream onto upstream d7f73b5a (no fwtpm changes); fw rebuild pending
 2026-10-27T07:07 verified: image build OK (rootfs 209 s on board); 2nd build bit-identical (all .img + manifest)
 2026-10-27T07:07 verified: image rootfs on board (loop, ro): initrd has ath_bdf hook, demo tools, openocd present
+2026-10-27T07:10 board: MCU flashed with ashen-fw on wolftpm d7f73b5a rebase (heartbeat disarmed first)
+2026-10-27T07:14 verified: new MCU fw: reboot keeps TPM, tamper re-provisions; ashen-fw 045b77c
+2026-10-27T07:22 board: deployed smmudump test kernel (boot-time SMMU SMR/S2CR/CBAR dump) as default
+2026-10-27T07:30 board: removed smmudump test kernel; deploying adspmap test kernel (ADSP on, QHEE S2 map)
+2026-10-27T07:43 board: /dev/mem scan of IMEM candidates stalled the bus -> watchdog reset (TPM kept); don't scan blind
+2026-10-27T07:45 board: removed adspmap test kernel; demo kernel 7deec2ec default again
+2026-10-27T07:47 verified: demo kernel default again; armed, payload staged, unlocked, Galene .21 OK, DP on
+2026-10-27T07:47 NOTES: ADSP round 2 (QHEE S2 dump; static map+VMID 6+assign: no ready); linux-demo branches

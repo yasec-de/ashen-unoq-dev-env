@@ -16,7 +16,15 @@ COMP="main contrib non-free non-free-firmware"
 D=http://snapshot.debian.org/archive
 pkgs=$(grep -vE '^\s*(#|$)' packages | tr '\n' ',' | sed 's/,$//')
 
+# Downloaded .debs persist next to the work dir between builds (the image's own apt cache is
+# still emptied by mmdebstrap's cleanup, so this doesn't change the output).
+CACHE=${APT_CACHE:-$W/../ashen-image-apt-cache}
+mkdir -p "$CACHE"
 mmdebstrap --variant=important --include="$pkgs" \
+	--skip=download/empty --skip=essential/unlink \
+	--setup-hook='mkdir -p "$1"/var/cache/apt/archives/' \
+	--setup-hook="sync-in $CACHE /var/cache/apt/archives/" \
+	--customize-hook="sync-out /var/cache/apt/archives $CACHE" \
 	--aptopt='Acquire::Check-Valid-Until "false"' --aptopt='Acquire::Retries "5"' \
 	--essential-hook='echo uno-q > "$1/etc/hostname"' \
 	--customize-hook="$W/customize.sh \"\$1\" $W" \
@@ -26,6 +34,7 @@ mmdebstrap --variant=important --include="$pkgs" \
 	"deb $D/debian/$SNAPSHOT trixie-updates $COMP" \
 	"deb $D/debian-security/$SNAPSHOT trixie-security $COMP"
 
+echo "$(date +%T) splitting ESP from rootfs"
 # split: the ESP goes to its own partition, the rootfs keeps an empty mount point
 rm -rf esp; mkdir esp
 tar -C esp -xf full.tar --strip-components=3 ./boot/efi
