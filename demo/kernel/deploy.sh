@@ -4,10 +4,10 @@
 # console on the monitor (tty0 last = /dev/console), quiet console loglevel, crashkernel for
 # the wipe payload, crash_memaction=secret, and NO qcom_scm.download_mode (reset must reboot).
 # Older entries stay installed and selectable in systemd-boot.
-#   deploy.sh [--reboot]
+#   [K=dir] deploy.sh [--reboot]   (K=/workspace/cache/out/kernel-test for KTEST builds)
 set -euo pipefail
 B=/workspace/demo/bssh
-K=/workspace/cache/out/kernel
+K=${K:-/workspace/cache/out/kernel}
 krel=$(cat "$K/kernelrelease")
 dtb=qrb2210-arduino-imola-ashen-demo.dtb
 cmdline_extra="console=ttyMSM0,115200n8 console=tty0 fbcon=font:TER16x32 loglevel=6 systemd.show_status=error printk.devkmsg=on crashkernel=64M@0x80000000 crash_memaction=secret"
@@ -15,7 +15,7 @@ echo "deploying $krel"
 
 # a fresh install needs room for Image + initrd; a reinstall of the same version replaces them
 $B "test -d /boot/efi/\$(cat /etc/machine-id)/$krel || df --output=avail -k /boot/efi | tail -1" |
-	{ read -r kb || true; [ -z "$kb" ] || [ "$kb" -gt 90000 ] || { echo "only ${kb}k free on ESP" >&2; exit 1; }; }
+	{ read -r kb || true; [ -z "$kb" ] || [ "$kb" -gt 70000 ] || { echo "only ${kb}k free on ESP" >&2; exit 1; }; }
 scp -q -i /workspace/id_ed25519_claude_vm "$K/Image" "$K/modules.tar.gz" \
 	"$K/$dtb" root@"$($B --host)":/var/tmp/
 

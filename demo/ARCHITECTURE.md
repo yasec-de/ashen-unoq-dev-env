@@ -13,7 +13,7 @@ TLS keys. The monitor shows the kernel console throughout.
 
 | Part | Role |
 |---|---|
-| QRB2210 (4× A53, Debian 13) | Linux host, KVM via patched QHEE + EL2 U-Boot (`kvm-hvc-poc/`) |
+| QRB2210 (4× A53, Debian 13) | Linux host, KVM via patched QHEE + EL2 U-Boot (`kvm-hvc-poc/`); ADSP, GPU, venus, audio off |
 | STM32U585 MCU (`ashen-fw/`) | Tamper monitor + firmware TPM 2.0; 4 Mbaud LPUART1 (PG7/PG8) to SoC SE2 (GPIO_71/80) |
 | Button on D10 = PB9 | Tamper sensor, external pull-up; pressed = low |
 | USB Ethernet + switch | Demo network, one laptop provides DHCP/internet |

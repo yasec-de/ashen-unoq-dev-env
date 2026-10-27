@@ -684,7 +684,7 @@ now-unused `hyp_mem` 6 MiB carveout and the bogus `GIC_PPI 0` hyp-timer entry in
 - Root cause: R2504 bad (seen under microscope), replaced with a wire link 2026-10-27; link handshakes since.
   Re-test any time with demo/wiretest.py (copy to board, run as root).
 
-### ADSP (remoteproc1) fails with -22 since the QHEE teardown? (2026-10-27, open)
+### ADSP (remoteproc1) fails with -22 since the QHEE teardown? (2026-10-27, closed: ADSP disabled)
 - `qcom_q6v5_pas ab00000.remoteproc: error -22 initializing firmware qcom/qcm2290/adsp.mbn`: the PAS
   INIT_IMAGE SCM call (`qcom_scm_pas_init_image`) fails; the ELF/mdt header itself is accepted.
 - ADSP came up on every captured 7.0 (Arduino tree) boot (May-Jul logs: "adsp is now up"); it fails on
@@ -706,3 +706,18 @@ now-unused `hyp_mem` 6 MiB carveout and the bogus `GIC_PPI 0` hyp-timer entry in
   *-el2.dtso overlays). Fix candidate (linux-demo a74da2ae): `&remoteproc_adsp { iommus = <&apps_smmu
   0x1c0 0x0>; }` -- 0x1c0 = base of agatti's LPASS SID block (q6asm 0x1c1, fastrpc CBs 0x1c3+), by
   analogy with lemans/monaco/talos where the PIL SID is the DSP block base.
+- With the iommus fix INIT_IMAGE passes; next failure: GET_RSCTABLE unsupported (TZ without QHEE) ->
+  linux-demo 4715c21e treats -EOPNOTSUPP as "use the firmware's table". Then auth_and_reset succeeds but
+  "start timed out" (-110): smp2p-adsp IRQ count 0, no SMMU global/context faults ever (GFSR 0, CB4 FSR 0,
+  SID 0x1c0 -> CB4 with the carveout mapped IOVA=PA), so the Q6 either never runs or stalls before DDR.
+- Stock QHEE pil_lpass_mem_assign (0x4574f314): walks the ELF segments and pil_map_memory()s them to
+  {VMID 6 ADSP_Q6_ELF, 0x16 LPASS} (RW/RWX; RO segments to 6 only), i.e. QHEE stage-2 + xPU via its "AC"
+  layer (/ac/autosmmuconfig, TZ secure channels, "ADSP Table"). Re-doing that from Linux with
+  qcom_scm_assign_mem (branch adsp-assign-test, param assign_vmids) succeeds (TZ ret 0) but changes nothing.
+  Careful: that param leaked to the modem's recovery once (modem carveout went to VMID 6; reboot hung).
+- gcc_lpass_aggre_tbu_clk (QHEE clock table) is already on; qcm2290 has no LPASS TBU GDSC.
+- Not needed for the demo: linux-demo 5e1d1502 disables &remoteproc_adsp. Left: RE of QHEE's AC/SMMU
+  static config for LPASS SIDs, or TZ's PIL/xPU log.
+- Modem: one "DOG detects stalled initialization" fatal ~60 s after every boot (ADSP on-but-failing or
+  off), recovers in 0.2 s, Wi-Fi survives; prints 3 err lines on the HDMI console. 01:12 boot had none.
+  Two plain reboots after such a crash hung silently (no UART after shutdown, no HDMI); a verbose one passed.

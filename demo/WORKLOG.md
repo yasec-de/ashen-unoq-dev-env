@@ -101,7 +101,7 @@ One line per change to code or target, ≤120 chars, timestamp first.
 2026-10-28T00:10 demo/kernel/deploy.sh: dropped crash_kexec_post_notifiers again (notifiers can hang for s)
 2026-10-28T00:11 zeroize: solid red is the payload's first action (no drm_panic dependency)
 2026-10-28T00:15 demo/kernel/build.sh: incremental source update via read-tree with private index
-2026-10-28T01:00 board: deployed kernel a39af0f7 (gpu off, msm panic, no post_notifiers), payload red-first, rules, guest
+2026-10-28T01:00 board: deployed kernel a39af0f7 (gpu off, msm panic, no post_notifiers), payload red-first, rules+guest
 2026-10-28T01:40 linux-demo: reverted GPU-disable and pmdomain cherry-pick (suspected boot hang); rebuilding
 2026-10-28T02:00 board: user power-cycled; same demo kernel booted fine (Galene at 23.7 s): pmdomain theory wrong
 2026-10-28T02:01 linux-demo: dropped the two reverts; 'disarm heartbeat on shutdown' (.shutdown hook); rebuilding
@@ -136,3 +136,24 @@ One line per change to code or target, ≤120 chars, timestamp first.
 2026-10-28T09:30 linux-demo: overlay: ADSP iommus <&apps_smmu 0x1c0 0> (EL2 PAS path); building
 2026-10-28T09:40 demo/test-kexec.sh: one-shot kexec test boots (no ESP changes)
 2026-10-28T09:50 NOTES.md: ADSP root-cause evidence (QHEE PIL handlers) + fix candidate
+2026-10-28T10:10 demo/test-kexec.sh: kexec -c (kexec_file_load ignored --dtb; first ADSP test invalid)
+2026-10-28T10:20 board: kexec from EL2/nVHE ends in a full firmware reboot (user observed) -> both kexec tests invalid
+2026-10-28T10:21 demo: removed test-kexec.sh; deploying ADSP-iommus DTB as regular entry
+2026-10-28T10:40 board: deployed ADSP-iommus DTB (834483c0) as default entry; rebooting
+2026-10-28T11:00 linux-demo: PAS tolerates TZ without GET_RSCTABLE (ADSP now -EIO there); building
+2026-10-28T11:20 board: deployed 4715c21e (GET_RSCTABLE fallback), rebooting
+2026-10-28T11:50 demo: uart-log.py (TCP 8811), board-reset.sh (TCP 8812 gpio)
+2026-10-28T11:55 board: reset via glasgow (hung after 4715c21e deploy)
+2026-10-27T01:20 demo/kernel/deploy.sh: K env selects the build dir (for KTEST builds)
+2026-10-27T01:20 board: deployed KTEST=assign kernel (PAS carveout hyp-assign test) as default
+2026-10-27T01:20 demo/kernel/deploy.sh: ESP free-space floor 90M->70M (a demo kernel install is 61M)
+2026-10-27T01:21 board: deployed KTEST=assign kernel (PAS carveout hyp-assign test) as default
+2026-10-27T01:23 board: reboot to undo hyp-assign of modem carveout to VMID 6 (test param leaked to modem)
+2026-10-27T01:29 board: hard reset via Glasgow A5 (reboot hung after modem-carveout assign test)
+2026-10-27T01:31 kernel: ADSP disabled in overlay (5e1d1502); deployed demo kernel as default, rebooting
+2026-10-27T01:38 board: hard reset via Glasgow (reboot hung during modem crash recovery)
+2026-10-27T01:53 board: hard reset via Glasgow (systemctl reboot hung again after modem crash)
+2026-10-27T01:57 NOTES/ARCHITECTURE: ADSP closed (disabled), QHEE pil_lpass_mem_assign RE, modem DOG crash note
+2026-10-27T02:08 board: hard reset via Glasgow (reboot cycle 2 ended on red payload screen, no reset)
+2026-10-27T02:14 board: payload (UART 1ms timeout, wdt 10s backstop) + ashen-pair ExecStop disarm installed
+2026-10-27T02:30 verified: 1 tamper + 3 reboot cycles OK with new payload/ExecStop (reboot 2: no VM DHCP lease)
