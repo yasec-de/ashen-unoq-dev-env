@@ -190,3 +190,7 @@ One line per change to code or target, ≤120 chars, timestamp first.
 2026-10-27T06:26 guest tarball rebuilt by build-guest.sh (same file list; new init/udhcpc.script)
 2026-10-27T06:26 README.md: setup, tools, limitations; ARCHITECTURE: no crash_kexec_post_notifiers (payload draws red)
 2026-10-27T06:26 doc: upstream candidates review (claude.ai/artifact/FrTt1o1dJ7KQZKhFivn5rf)
+2026-10-27T06:38 verified: VIN+dock cycles: reboots 3/3 kept TPM; tampers 2/3 OK, 3rd: crashkernel reserve failed
+2026-10-27T06:38 zeroize: payload PIC (Makefile rejects abs relocs); crashkernel=64M unpinned (KASLR clash)
+2026-10-27T06:38 board: payload + deploy (cmdline crashkernel=64M) installed
+2026-10-27T06:49 image/: build-image.sh (mmdebstrap on arm64 builder + rootless images + qdl flash dir); first run

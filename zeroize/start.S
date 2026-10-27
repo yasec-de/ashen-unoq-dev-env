@@ -7,8 +7,8 @@
  * exception vectors, then hands off to payload_main() which parses the DTB,
  * builds an identity map, and wipes RAM.
  *
- * Linked and loaded at PAYLOAD_BASE (pin it with crashkernel=SIZE@PAYLOAD_BASE)
- * so load PA == link VA and no PIC is needed.
+ * All addressing is PC-relative, so it runs wherever kexec loads it in the
+ * crashkernel region (the bottom of it, 2 MB-aligned).
  */
 
 	.section .head.text, "ax"

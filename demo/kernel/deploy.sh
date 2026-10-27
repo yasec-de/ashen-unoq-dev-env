@@ -10,7 +10,7 @@ B=/workspace/demo/bssh
 K=${K:-/workspace/cache/out/kernel}
 krel=$(cat "$K/kernelrelease")
 dtb=qrb2210-arduino-imola-ashen-demo.dtb
-cmdline_extra="console=ttyMSM0,115200n8 console=tty0 fbcon=font:TER16x32 loglevel=6 systemd.show_status=error printk.devkmsg=on crashkernel=64M@0x80000000 crash_memaction=secret"
+cmdline_extra="console=ttyMSM0,115200n8 console=tty0 fbcon=font:TER16x32 loglevel=6 systemd.show_status=error printk.devkmsg=on crashkernel=64M crash_memaction=secret"
 echo "deploying $krel"
 
 # a fresh install needs room for Image + initrd; a reinstall of the same version replaces them

@@ -1,8 +1,9 @@
 # Freestanding aarch64 wipe payload (kdump capture image). Build with the same
 # cross toolchain as the kernel: run via `nix develop ../ --command make`.
 #
-# PAYLOAD_BASE must match the pinned crashkernel base (crashkernel=SIZE@BASE),
-# and SIZE must be >= the reported Image size, rounded up.
+# The code is PC-relative only (ADRP/ADR, no absolute relocations; enforced
+# below), so it runs wherever kexec places it in the crashkernel region.
+# PAYLOAD_BASE is only the nominal link address.
 
 CROSS_COMPILE ?= aarch64-linux-gnu-
 CC      := $(CROSS_COMPILE)gcc
@@ -27,12 +28,14 @@ payload.o: payload.c
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 payload.elf: $(OBJS) payload.ld
+	@if $(CROSS_COMPILE)readelf -rW $(OBJS) | grep -E 'R_AARCH64_(ABS|MOVW_UABS)'; then \
+		echo "absolute relocations: the payload must stay position-independent"; exit 1; fi
 	$(LD) $(LDFLAGS) -o $@ $(OBJS)
 
 Image: payload.elf
 	$(OBJCOPY) -O binary $< $@
 	@size=$$($(CROSS_COMPILE)readelf -l payload.elf >/dev/null 2>&1; stat -c %s Image); \
-	 echo "Image: $$size bytes loaded at $(PAYLOAD_BASE); reserve crashkernel >= mem footprint (_end)."
+	 echo "Image: $$size bytes; reserve crashkernel >= mem footprint (_end)."
 
 clean:
 	rm -f $(OBJS) payload.elf Image

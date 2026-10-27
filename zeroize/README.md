@@ -40,10 +40,10 @@ Kernel side lives in `linux/` (vendored): `mm/secretmem.c`, `security/keys/key.c
 nix develop .. --command make            # -> zeroize/Image (raw arm64 Image)
 ```
 
-`PAYLOAD_BASE` (default `0x80000000`) **must** equal the pinned crashkernel base.
-The cmdline (`qcom-deb-images/.../qualcomm-linux-debian-image.yaml`) sets
-`crashkernel=64M@0x80000000`. If you move it: `make PAYLOAD_BASE=0x...` and update
-the cmdline together.
+The payload is position-independent (PC-relative addressing only; the Makefile
+fails the build on any absolute relocation), so the cmdline only sizes the region:
+`crashkernel=64M`. Don't pin it with `@ADDR`: with physical KASLR the EFI stub can put
+the kernel image inside a fixed window, and the reservation then fails for that boot.
 
 ## Deploy (debos / rootfs)
 
@@ -72,8 +72,8 @@ Tamper trigger (root-only, bypasses the sysrq mask): `echo c > /proc/sysrq-trigg
 
 ## Confirmed on hardware
 
-- `kexec -p -s` accepts the raw Image; it's placed at the crash base `0x80000000`
-  (2 MB-aligned, bottom-up) and entered there with `x0` = DTB, MMU off.
+- `kexec -p -s` accepts the raw Image; it's placed at the bottom of the crash region
+  (2 MB-aligned) and entered there with `x0` = DTB, MMU off.
 - Entry EL: kernel hands off at EL2 (nVHE) via `HVC_SOFT_RESTART`; `start.S`
   drops to EL1. Both paths exercised.
 - Full single-core wipe runs in ~0.85 s with `skipped=` 2–3 faults (secure
@@ -85,8 +85,6 @@ Tamper trigger (root-only, bypasses the sysrq mask): `echo c > /proc/sysrq-trigg
 
 ## Known open items
 
-- crashkernel base `0x80000000` is free RAM (`/proc/iomem`); adjust base + rebuild
-  payload if not.
 - Secondary A53s don't start under PSCI in the kdump context on this board
   (1/3 at best), so the wipe is single-core; revisit if a board brings them up.
 - 2 MB-rounded no-map exclusion leaves ≤2 MB slack per carveout edge (firmware
