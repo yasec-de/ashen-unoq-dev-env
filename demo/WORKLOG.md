@@ -231,3 +231,4 @@ One line per change to code or target, ≤120 chars, timestamp first.
 2026-10-27T13:36 board: installed payload 3d240d6c (USB stop), restaged
 2026-10-27T14:05 board: measured press->panic 1.3 ms (SWD press, kmsg marker); panic->kexec ~100 ms
 2026-10-27T14:10 rootfs: getty@tty1 drop-in TTYVTDisallocate=no (login prompt no longer wipes tty1); installed on board
+2026-11-02T12:54 ashen-fw 15c0a5e: wolftpm submodule URL -> yasec-de/ashen-wolfTPM (branch ashen-upstream pushed)
