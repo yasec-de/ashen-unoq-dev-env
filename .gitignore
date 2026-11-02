@@ -8,12 +8,7 @@
 /qdl/
 /u-boot/
 /unoq-bootloader-emmc-linux-251020/
-
-# Wipe-payload build artifacts (zeroize/)
-/zeroize/*.o
-/zeroize/*.elf
-/zeroize/Image
-/zeroize/test/secret-selftest
+/zeroize/
 
 # Kernel build artifacts dropped in the repo root by build-image.sh
 /linux-image-*.deb

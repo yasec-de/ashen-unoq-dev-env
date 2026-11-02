@@ -24,6 +24,18 @@ The tamper button (D10/PB9) wipes everything, and the board comes back with new 
 
 - **Tamper button:** D10 to GND, external pull-up.
 
+## Repositories
+
+Besides this one, the demo builds from checkouts next to `demo/` in the workspace root (each is
+gitignored here and has its own history):
+
+| Path | Repository |
+|---|---|
+| `zeroize/` | https://github.com/yasec-de/ashen-kexec-zeroizer (wipe payload) |
+| `linux-demo/` | https://github.com/yasec-de/ashen-linux, branch `ashen-demo` (worktree of `linux/`) |
+| `ashen-fw/` | https://github.com/yasec-de/ashen-fw (wolfTPM submodule: ashen-wolfTPM) |
+| `libkrun/` | https://github.com/yasec-de/ashen-libkrun |
+
 ## Tools (run from this directory)
 
 | Script | Does |

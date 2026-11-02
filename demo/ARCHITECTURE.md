@@ -28,7 +28,7 @@ TLS keys. The monitor shows the kernel console throughout.
   **tpm_ashen** as `/dev/tpmrm0`.
 - **crash memaction** (kernel): `MADV_CRASH_SECRET` tags memory; kernel passes a page bitmap to
   the crash kernel as an ELF note `MEMACTION`.
-- **zeroize payload** (`zeroize/`): the kdump "crash kernel". Wipes tagged pages, then all RAM,
+- **zeroize payload** (`zeroize/`, repo `ashen-kexec-zeroizer`): the kdump "crash kernel". Wipes tagged pages, then all RAM,
   resets; solid red on the display meanwhile.
 - **ashen-fw**: Noise responder, TOFU pairing, volatile fwTPM (seeds in masked RAM). On tamper:
   wipe SRAM, go silent, self-reset (PB9, done).
