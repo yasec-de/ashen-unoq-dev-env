@@ -235,3 +235,4 @@ One line per change to code or target, ≤120 chars, timestamp first.
 2026-11-02T13:26 ws: zeroize/ split out (history kept) to yasec-de/ashen-kexec-zeroizer; now an ignored checkout
 2026-11-02T14:07 linux-demo: 71643aac squash split into 7 commits (+fixup moved to bottom), KUnit fixed: 20/20
 2026-11-02T15:51 linux-demo: checkpatch fixup!/amend! commits + dt-bindings; ashen-demo, adsp-q6ss force-pushed
+2026-11-02T17:41 linux-demo: trailers -> Assisted-by; fixups autosquashed since next-20260922 (not pushed yet)
