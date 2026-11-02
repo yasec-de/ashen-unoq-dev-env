@@ -233,3 +233,5 @@ One line per change to code or target, ≤120 chars, timestamp first.
 2026-10-27T14:10 rootfs: getty@tty1 drop-in TTYVTDisallocate=no (login prompt no longer wipes tty1); installed on board
 2026-11-02T12:54 ashen-fw 15c0a5e: wolftpm submodule URL -> yasec-de/ashen-wolfTPM (branch ashen-upstream pushed)
 2026-11-02T13:26 ws: zeroize/ split out (history kept) to yasec-de/ashen-kexec-zeroizer; now an ignored checkout
+2026-11-02T14:07 linux-demo: 71643aac squash split into 7 commits (+fixup moved to bottom), KUnit fixed: 20/20
+2026-11-02T15:51 linux-demo: checkpatch fixup!/amend! commits + dt-bindings; ashen-demo, adsp-q6ss force-pushed
