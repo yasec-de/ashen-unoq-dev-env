@@ -239,3 +239,7 @@ One line per change to code or target, ≤120 chars, timestamp first.
 2026-11-24T18:30 board: MCU silent after gdb-load flash (UART cfg OK, no replies); reflashed via mcu-flash.sh -> link up
 2026-11-24T18:31 board: ashen-pair/demo/galene-vm restarted; TPM had new seeds, volume re-provisioned, new TLS cert
 2026-11-24T18:32 demo/mcu-flash.sh: scp accepts new host keys (known_hosts lost on VM restart)
+2026-11-24T18:45 libkrun: rewrote patch as 15306cc/63fbb61/4015b7f: secret-only, no cache; old at crash-memaction-wip
+2026-11-24T18:47 demo: ashen-galene-vm drops --crash-memaction (krunwipe always marks secret); cache/out/krun rebuilt
+2026-11-24T18:48 board: installed new libkrun.so.2 + krunwipe; VM RAM marked cm (512 MiB), --verify OK
+2026-11-24T18:52 verified: tamper cycle (re-provision, new cert, galene 37s) and reboot (unlock, same cert, 42s)

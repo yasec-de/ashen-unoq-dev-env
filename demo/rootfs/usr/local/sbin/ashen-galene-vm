@@ -53,8 +53,7 @@ JSON
 chmod 600 "$ROOTFS/srv/galene/data/ice-servers.json"
 
 say "[5/7] starting Galene microVM (512 MiB guest RAM, all tagged secret)"
-/usr/local/lib/ashen/krunwipe --kernel "$KERNEL" --mem 512 --cpus 2 \
-	--crash-memaction secret --tap "$TAP" \
+/usr/local/lib/ashen/krunwipe --kernel "$KERNEL" --mem 512 --cpus 2 --tap "$TAP" \
 	run "$ROOTFS" /init "$(date +%s)" "$pub" 2>&1 |
 	while IFS= read -r line; do
 		# Narration goes to the console; Galene's own log lines only to the journal.
