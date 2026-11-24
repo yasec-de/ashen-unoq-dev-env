@@ -236,3 +236,6 @@ One line per change to code or target, ≤120 chars, timestamp first.
 2026-11-02T14:07 linux-demo: 71643aac squash split into 7 commits (+fixup moved to bottom), KUnit fixed: 20/20
 2026-11-02T15:51 linux-demo: checkpatch fixup!/amend! commits + dt-bindings; ashen-demo, adsp-q6ss force-pushed
 2026-11-02T17:41 linux-demo: trailers -> Assisted-by; fixups autosquashed since next-20260922 (not pushed yet)
+2026-11-24T18:30 board: MCU silent after gdb-load flash (UART cfg OK, no replies); reflashed via mcu-flash.sh -> link up
+2026-11-24T18:31 board: ashen-pair/demo/galene-vm restarted; TPM had new seeds, volume re-provisioned, new TLS cert
+2026-11-24T18:32 demo/mcu-flash.sh: scp accepts new host keys (known_hosts lost on VM restart)
