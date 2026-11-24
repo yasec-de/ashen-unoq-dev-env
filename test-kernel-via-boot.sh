@@ -19,7 +19,7 @@ DTB_DEST=qrb2210-arduino-imola-ashen-tamper.dtb
 [[ -f "$IMAGE" ]] || { echo "missing $IMAGE, build the kernel first" >&2; exit 1; }
 [[ -z "$DTB" || -f "$DTB" ]] || { echo "dtb not found: $DTB" >&2; exit 1; }
 
-VERSION=$(make -sC linux LOCALVERSION=-test kernelrelease)
+VERSION=$(make -sC linux LOCALVERSION=-tpm kernelrelease)
 echo "version:  $VERSION"
 
 adb shell sudo mount -o remount,rw /boot/efi
@@ -30,8 +30,8 @@ rm -rf modules
 mkdir modules
 make -C linux INSTALL_MOD_PATH=$(realpath modules) modules_install
 adb shell sudo rm -rf /lib/modules/$VERSION
-adb push modules/lib/modules/$VERSION /tmp/modules
-adb shell sudo mv /tmp/modules /lib/modules/$VERSION
+adb push modules/lib/modules/$VERSION /var/tmp/modules
+adb shell sudo mv /var/tmp/modules /lib/modules/$VERSION
 
 echo "Installing devicetree..."
 adb shell sudo mkdir -p /lib/modules/$VERSION/dtb
@@ -47,9 +47,10 @@ adb push "$IMAGE" /tmp/Image
 adb shell "sudo kernel-install add $VERSION /tmp/Image"
 
 echo "Updating bootloader config..."
+INSTALL_DATE=$(date)
 # Find the BLS entry id kernel-install just wrote (matches the version) and set
 # it as the default in loader.conf. bootctl set-default writes loader.conf.
-ENTRY=$(adb shell "sudo bootctl list" | grep -oE '[^ ]+'"$VERSION"'[^ ]*\.conf' | head -1)
+ENTRY=$(adb shell "sudo bootctl list" | grep -oE '[^ ]+'"$VERSION"'\.conf' | head -1)
 [[ -n "$ENTRY" ]] || { echo "couldn't find BLS entry for $VERSION in bootctl list" >&2; exit 1; }
 # We can't use "bootctl set-default" since that uses EFI vars, not loader.conf.
 # Our platform doesn't have (working) EFI vars.
@@ -58,7 +59,12 @@ adb shell "sudo sh -c 'echo \"default $ENTRY\" >> /boot/efi/loader/loader.conf'"
 adb shell "sudo grep -e '^console-mode' /boot/efi/loader/loader.conf || sudo sh -c 'echo console-mode keep >> /boot/efi/loader/loader.conf'"
 adb shell "sudo grep -e '^timeout' /boot/efi/loader/loader.conf || sudo sh -c 'echo timeout 3 >> /boot/efi/loader/loader.conf'"
 adb shell "sudo sed -i '/^devicetree/d' /boot/efi/loader/entries/$ENTRY"
+adb shell "sudo sed -i 's/^title.*$/title Test $INSTALL_DATE (ashen with tpm)/g' /boot/efi/loader/entries/$ENTRY"
 adb shell "sudo sh -c 'echo devicetree /dtb/$DTB_DEST >> /boot/efi/loader/entries/$ENTRY'"
+adb shell "sudo sed -i -E '/^options[[:space:]]/{/crashkernel=64M@0x80000000/! s/[[:space:]]*$/ crashkernel=64M@0x80000000 qcom_scm.download_mode=full crash_memaction=secret/}' /boot/efi/loader/entries/$ENTRY"
+
+ENTRY_NO_MA="/boot/efi/loader/entries/$(basename -s .conf $ENTRY)-no-ma.conf"
+adb shell "sudo sed -E 's/crash_memaction=secret//g;s/^title.*$/title Test $INSTALL_DATE (no memaction)/g' /boot/efi/loader/entries/$ENTRY | sudo tee $ENTRY_NO_MA"
 
 echo "Disabling systemd watchdog use..."
 #adb shell "sudo sed -i -E 's/^[#[:space:]]*RuntimeWatchdogSec=.*/RuntimeWatchdogSec=0/' /etc/systemd/system.conf"
