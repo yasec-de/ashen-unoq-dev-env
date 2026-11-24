@@ -8,6 +8,10 @@ These scripts assume that the uno Q is wired to a glasgow debug multitool as [de
 here](https://jaseg.de/blog/arduino-uno-q-kernel-debugging/). The glasgow can reset the board, access the SoC's JTAG,
 and access the SoC's UART.
 
+> [!NOTE]
+> Most of these scripts are LLM-generated. Since they are debug tools only and not critical infrastructure, we don't see
+> any issue with that but please keep it in mind before reading them.
+
 ![Photo of an uno q wired to a glasgow](debug-setup.jpg)
 
 ## AI Policy
